@@ -356,6 +356,16 @@ const HTML_PAGE = `<!DOCTYPE html>
       backdrop-filter: blur(12px);
     }
     .msg-img-preview { max-width: 220px; border-radius: 12px; margin-bottom: 6px; display: block; }
+
+    .analysing-pill {
+      display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px;
+      border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+      font-size: 13px; font-weight: 500; color: var(--text-secondary);
+      backdrop-filter: blur(12px);
+    }
+    .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+    .user-meta { display: flex; flex-direction: column; min-width: 0; }
+    .user-handle { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>
 </head>
 <body>
@@ -376,7 +386,10 @@ const HTML_PAGE = `<!DOCTYPE html>
     <div class="sidebar-footer">
       <div class="user-pill">
         <div id="userAvatar" class="avatar">U</div>
-        <div id="userName" class="user-name">User</div>
+        <div class="user-meta">
+          <div id="userName" class="user-name">User</div>
+          <div id="userHandle" class="user-handle"></div>
+        </div>
       </div>
       <button class="icon-btn" onclick="openSettings()" title="Settings">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
@@ -475,12 +488,14 @@ const HTML_PAGE = `<!DOCTYPE html>
         <label class="field-label">Brightness (<span id="brightnessVal">100</span>%)</label>
         <input id="brightnessRange" type="range" min="60" max="125" value="100" style="width:100%;" oninput="applyBrightness(this.value)" />
       </div>
-      <div>
-        <label class="field-label">Custom Logo (Upload image or paste URL)</label>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <input id="logoUrlInput" class="field-input" type="text" placeholder="https://... or upload below" />
-          <input id="logoFileInput" type="file" accept="image/*" hidden onchange="uploadLogoFile(this.files[0])" />
-          <button class="btn-primary" type="button" onclick="document.getElementById('logoFileInput').click()" style="white-space:nowrap;">Upload</button>
+      <div id="adminOnlySettings" style="display:none; flex-direction:column; gap:12px;">
+        <div>
+          <label class="field-label">App Logo (Owner Only — or upload logo.png to GitHub)</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input id="logoUrlInput" class="field-input" type="text" placeholder="https://... or upload below" />
+            <input id="logoFileInput" type="file" accept="image/*" hidden onchange="uploadLogoFile(this.files[0])" />
+            <button class="btn-primary" type="button" onclick="document.getElementById('logoFileInput').click()" style="white-space:nowrap;">Upload</button>
+          </div>
         </div>
       </div>
       <div>
@@ -512,11 +527,9 @@ const HTML_PAGE = `<!DOCTYPE html>
     if (tg) { tg.ready(); tg.expand(); }
 
     const MODELS = [
-      { id: "openai/gpt-oss-120b", label: "ChatGPT 4o", desc: "Great for most tasks (GPT OSS 120B)", provider: "groq" },
-      { id: "openai/gpt-oss-20b", label: "ChatGPT 4o-mini", desc: "Fastest for everyday answers", provider: "groq" },
-      { id: "qwen/qwen3.8-27b", label: "ChatGPT o1-mini", desc: "Advanced reasoning & coding", provider: "groq" },
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", desc: "Multimodal & fast (if Gemini key set)", provider: "gemini" },
-      { id: "deepseek/deepseek-chat-v3-0324:free", label: "DeepSeek V3 (Free)", desc: "Via OpenRouter free tier", provider: "openrouter" }
+      { id: "openai/gpt-oss-20b", label: "Orvix Fast", desc: "Instant everyday answers & chat", provider: "groq", mode: "fast" },
+      { id: "openai/gpt-oss-120b", label: "Orvix Thinking", desc: "Smart reasoning, math & coding", provider: "groq", mode: "thinking" },
+      { id: "qwen/qwen3.8-27b", label: "Orvix Deep Research", desc: "In-depth analysis & multi-step research", provider: "groq", mode: "deep" }
     ];
 
     let state = {
@@ -542,7 +555,16 @@ const HTML_PAGE = `<!DOCTYPE html>
         const u = tg.initDataUnsafe.user;
         const full = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username || "User";
         document.getElementById("userName").textContent = full;
-        document.getElementById("userAvatar").textContent = full.charAt(0).toUpperCase();
+        if (u.username) document.getElementById("userHandle").textContent = "@" + u.username;
+        const av = document.getElementById("userAvatar");
+        if (u.photo_url) {
+          av.innerHTML = '<img src="' + escapeHtml(u.photo_url) + '" alt=""/>';
+        } else {
+          av.textContent = full.charAt(0).toUpperCase();
+        }
+        const isOwner = (u.username || "").toLowerCase() === "orvix16";
+        const adminSec = document.getElementById("adminOnlySettings");
+        if (adminSec) adminSec.style.display = isOwner ? "flex" : "none";
       }
       renderModelMenu();
       renderSidebar();
@@ -551,9 +573,8 @@ const HTML_PAGE = `<!DOCTYPE html>
 
 
     function getLogoHtml(sz) {
-      const custom = localStorage.getItem("tg_gpt_logo") || "";
-      if (custom) return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI"/>';
-      return '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a4 4 0 0 1 3.5 2.1A4 4 0 0 1 20 8a4 4 0 0 1-.5 5.6A4 4 0 0 1 16 20a4 4 0 0 1-5.6.5A4 4 0 0 1 4 16a4 4 0 0 1 .5-5.6A4 4 0 0 1 8 4a4 4 0 0 1 4-2Z"/></svg>';
+      const custom = localStorage.getItem("tg_gpt_logo") || "https://raw.githubusercontent.com/bereket1643/orvix-ai/main/logo.png";
+      return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI" onerror="this.outerHTML=\'<svg width=' + sz + ' height=' + sz + ' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'1.8\\\'><circle cx=\\\'12\\\' cy=\\\'12\\\' r=\\\'9\\\'/><path d=\\\'M8 12l3 3 5-5\\\'/></svg>\'"/>';
     }
     function applyFontSize(val) {
       document.documentElement.style.setProperty("--chat-font-size", val + "px");
@@ -763,7 +784,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             '<div class="msg-assistant-wrap">' +
               '<div class="assistant-avatar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg></div>' +
               '<div class="assistant-content">' +
-                (m.content ? renderMarkdown(m.content) : '<span class="typing-dot"></span>') +
+                (m.content ? renderMarkdown(m.content) : '<div class="analysing-pill"><span class="typing-dot"></span><span>Orvix analysing...</span></div>') +
                 (!state.isGenerating || idx < msgs.length - 1 ? (
                   '<div class="msg-actions">' +
                     '<button class="msg-action-btn" onclick="copyMsg(' + idx + ', this)">Copy</button>' +
@@ -1351,7 +1372,10 @@ async function handleMiniAppChat(request, env) {
       return new Response("Missing AI_API_KEY. Set it in Cloudflare Worker Variables or Mini App Settings.", { status: 400 });
     }
 
-    const voiceNote = body.fastVoice ? " Keep your answer very brief (1 to 2 short spoken sentences)." : "";
+    const deepNote = (!body.fastVoice && body.model === "qwen/qwen3.8-27b")
+      ? " Provide a thorough, well-structured Deep Research analysis with clear sections, key insights, and practical takeaways."
+      : "";
+    const voiceNote = body.fastVoice ? " Keep your answer very brief (1 to 2 short spoken sentences)." : deepNote;
     const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
     const rawMsgs = body.messages || [];
     const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
