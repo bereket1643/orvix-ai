@@ -6,7 +6,7 @@ const HTML_PAGE = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>ChatGPT</title>
+  <title>Orvix AI</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" />
@@ -276,6 +276,86 @@ const HTML_PAGE = `<!DOCTYPE html>
       display: inline-block; width: 8px; height: 8px; border-radius: 50%;
       background: var(--text-primary); animation: pulse 1s infinite; margin-left: 4px;
     }
+
+    /* Voice Conversation Mode Overlay */
+    .voice-overlay {
+      position: fixed; inset: 0; background: var(--bg-main); z-index: 90;
+      display: none; flex-direction: column; align-items: center; justify-content: space-between;
+      padding: calc(24px + env(safe-area-inset-top)) 20px calc(32px + env(safe-area-inset-bottom));
+    }
+    .voice-overlay.open { display: flex; }
+    .voice-top { width: 100%; display: flex; justify-content: space-between; align-items: center; }
+    .voice-status-badge { font-size: 13px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.02em; }
+    .voice-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; width: 100%; max-width: 420px; text-align: center; }
+    .voice-orb {
+      width: 150px; height: 150px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #34d399, #059669 60%, #064e3b);
+      box-shadow: 0 0 40px rgba(16, 163, 127, 0.35);
+      transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.3s ease;
+      cursor: pointer;
+    }
+    .voice-orb.listening { animation: orbListen 1.6s infinite ease-in-out; }
+    .voice-orb.thinking { background: radial-gradient(circle at 35% 35%, #60a5fa, #2563eb 60%, #1e3a8a); box-shadow: 0 0 45px rgba(59, 130, 246, 0.45); animation: orbSpin 1.2s infinite linear; }
+    .voice-orb.speaking { background: radial-gradient(circle at 35% 35%, #a7f3d0, #10a37f 60%, #065f46); animation: orbSpeak 0.6s infinite alternate ease-in-out; }
+    @keyframes orbListen { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+    @keyframes orbSpeak { 0% { transform: scale(1); } 100% { transform: scale(1.16); } }
+    @keyframes orbSpin { 0% { transform: scale(0.96) rotate(0deg); } 50% { transform: scale(1.03) rotate(180deg); } 100% { transform: scale(0.96) rotate(360deg); } }
+    .voice-caption { font-size: 15px; line-height: 1.5; color: var(--text-secondary); min-height: 48px; max-height: 140px; overflow-y: auto; padding: 0 12px; }
+    .voice-controls { display: flex; align-items: center; gap: 22px; }
+    .voice-ctrl-btn {
+      width: 56px; height: 56px; border-radius: 50%; background: var(--bg-composer);
+      border: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: center;
+      color: var(--text-primary); font-size: 18px;
+    }
+    .voice-ctrl-btn.end { background: #ef4444; color: #fff; border-color: transparent; }
+    .voice-ctrl-btn.muted { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+    :root {
+      --chat-font-size: 15px;
+      --app-brightness: 1;
+      --brand-accent: #10a37f;
+      --glass-bg: rgba(255, 255, 255, 0.06);
+      --glass-border: rgba(255, 255, 255, 0.14);
+    }
+    html.light {
+      --glass-bg: rgba(255, 255, 255, 0.72);
+      --glass-border: rgba(0, 0, 0, 0.09);
+    }
+    body {
+      filter: brightness(var(--app-brightness));
+      background: radial-gradient(circle at 20% 10%, rgba(16, 163, 127, 0.14), transparent 42%),
+                  radial-gradient(circle at 85% 80%, rgba(59, 130, 246, 0.12), transparent 45%),
+                  var(--bg-main);
+    }
+    .assistant-content, .msg-bubble-user { font-size: var(--chat-font-size) !important; }
+    .topbar, .composer-box, .suggestion-card, .modal {
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+    .suggestion-card {
+      background: var(--glass-bg) !important;
+      border: 1px solid var(--glass-border) !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    }
+    .composer-box {
+      background: var(--glass-bg) !important;
+      border: 1px solid var(--glass-border) !important;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22);
+    }
+    .gpt-logo {
+      width: 64px !important; height: 64px !important;
+      background: linear-gradient(135deg, rgba(16,163,127,0.28), rgba(59,130,246,0.28)) !important;
+      border: 1px solid var(--glass-border) !important;
+      box-shadow: 0 10px 30px rgba(16, 163, 127, 0.25);
+      overflow: hidden;
+    }
+    .gpt-logo img, .assistant-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .creator-pill {
+      font-size: 12px; color: var(--text-secondary); background: var(--glass-bg);
+      border: 1px solid var(--glass-border); padding: 5px 12px; border-radius: 999px;
+      backdrop-filter: blur(12px);
+    }
+    .msg-img-preview { max-width: 220px; border-radius: 12px; margin-bottom: 6px; display: block; }
   </style>
 </head>
 <body>
@@ -337,17 +417,37 @@ const HTML_PAGE = `<!DOCTYPE html>
         <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Attach file or image">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <textarea id="promptInput" class="composer-input" rows="1" placeholder="Message ChatGPT" oninput="autoResize(this); updateSendBtn();" onkeydown="handleKey(event)"></textarea>
+        <textarea id="promptInput" class="composer-input" rows="1" placeholder="Message Orvix AI" oninput="autoResize(this); updateSendBtn();" onkeydown="handleKey(event)"></textarea>
         <button id="micBtn" class="icon-btn mic-btn" onclick="toggleVoice()" title="Voice input">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        </button>
+        <button id="voiceModeBtn" class="icon-btn" onclick="openVoiceMode()" title="Voice conversation">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M4 10v4"/><path d="M20 10v4"/></svg>
         </button>
         <button id="sendBtn" class="send-btn" onclick="onSendOrStop()" disabled title="Send">
           <svg id="sendIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </button>
       </div>
-      <div class="disclaimer">ChatGPT can make mistakes. Check important info.</div>
+      <div class="disclaimer">Orvix AI • Built by Bereket • Check important info.</div>
     </div>
   </main>
+
+  <div id="voiceOverlay" class="voice-overlay">
+    <div class="voice-top">
+      <span id="voiceStatusBadge" class="voice-status-badge">Voice Conversation</span>
+      <button class="icon-btn" onclick="closeVoiceMode()" title="Close">✕</button>
+    </div>
+    <div class="voice-center">
+      <div id="voiceOrb" class="voice-orb listening" onclick="onOrbTap()"></div>
+      <div id="voiceCaption" class="voice-caption">Listening... Speak now</div>
+    </div>
+    <div class="voice-controls">
+      <button id="voiceMuteBtn" class="voice-ctrl-btn" onclick="toggleVoiceMute()" title="Mute/Unmute">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+      </button>
+      <button class="voice-ctrl-btn end" onclick="closeVoiceMode()" title="End Voice Mode">✕</button>
+    </div>
+  </div>
 
   <div id="settingsModal" class="modal-backdrop" onclick="if(event.target===this) closeSettings()">
     <div class="modal">
@@ -361,6 +461,22 @@ const HTML_PAGE = `<!DOCTYPE html>
           <option value="dark">Dark (ChatGPT Default)</option>
           <option value="light">Light</option>
         </select>
+      </div>
+      <div>
+        <label class="field-label">Text Size (<span id="fontSizeVal">15</span>px)</label>
+        <input id="fontSizeRange" type="range" min="12" max="22" value="15" style="width:100%;" oninput="applyFontSize(this.value)" />
+      </div>
+      <div>
+        <label class="field-label">Brightness (<span id="brightnessVal">100</span>%)</label>
+        <input id="brightnessRange" type="range" min="60" max="125" value="100" style="width:100%;" oninput="applyBrightness(this.value)" />
+      </div>
+      <div>
+        <label class="field-label">Custom Logo (Upload image or paste URL)</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input id="logoUrlInput" class="field-input" type="text" placeholder="https://... or upload below" />
+          <input id="logoFileInput" type="file" accept="image/*" hidden onchange="uploadLogoFile(this.files[0])" />
+          <button class="btn-primary" type="button" onclick="document.getElementById('logoFileInput').click()" style="white-space:nowrap;">Upload</button>
+        </div>
       </div>
       <div>
         <label class="field-label">Custom Instructions (System Prompt)</label>
@@ -414,7 +530,9 @@ const HTML_PAGE = `<!DOCTYPE html>
     };
 
     function init() {
+      if (!MODELS.some(x => x.id === state.model)) { state.model = MODELS[0].id; localStorage.setItem("tg_gpt_model", state.model); }
       applyTheme(state.theme);
+      applyDisplayPrefs();
       if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         const u = tg.initDataUnsafe.user;
         const full = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username || "User";
@@ -424,6 +542,43 @@ const HTML_PAGE = `<!DOCTYPE html>
       renderModelMenu();
       renderSidebar();
       renderChat();
+    }
+
+
+    function getLogoHtml(sz) {
+      const custom = localStorage.getItem("tg_gpt_logo") || "";
+      if (custom) return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI"/>';
+      return '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a4 4 0 0 1 3.5 2.1A4 4 0 0 1 20 8a4 4 0 0 1-.5 5.6A4 4 0 0 1 16 20a4 4 0 0 1-5.6.5A4 4 0 0 1 4 16a4 4 0 0 1 .5-5.6A4 4 0 0 1 8 4a4 4 0 0 1 4-2Z"/></svg>';
+    }
+    function applyFontSize(val) {
+      document.documentElement.style.setProperty("--chat-font-size", val + "px");
+      localStorage.setItem("tg_gpt_fontsize", val);
+      const el = document.getElementById("fontSizeVal");
+      if (el) el.textContent = val;
+    }
+    function applyBrightness(val) {
+      document.documentElement.style.setProperty("--app-brightness", (val / 100).toFixed(2));
+      localStorage.setItem("tg_gpt_brightness", val);
+      const el = document.getElementById("brightnessVal");
+      if (el) el.textContent = val;
+    }
+    function uploadLogoFile(file) {
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = () => {
+        document.getElementById("logoUrlInput").value = r.result;
+      };
+      r.readAsDataURL(file);
+    }
+    function applyDisplayPrefs() {
+      const fs = localStorage.getItem("tg_gpt_fontsize") || "15";
+      const br = localStorage.getItem("tg_gpt_brightness") || "100";
+      applyFontSize(fs);
+      applyBrightness(br);
+      const fsR = document.getElementById("fontSizeRange");
+      const brR = document.getElementById("brightnessRange");
+      if (fsR) fsR.value = fs;
+      if (brR) brR.value = br;
     }
 
     function applyTheme(t) {
@@ -577,8 +732,9 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (!msgs.length) {
         scroll.innerHTML =
           '<div class="empty-state">' +
-            '<div class="gpt-logo"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a4 4 0 0 1 3.5 2.1A4 4 0 0 1 20 8a4 4 0 0 1-.5 5.6A4 4 0 0 1 16 20a4 4 0 0 1-5.6.5A4 4 0 0 1 4 16a4 4 0 0 1 .5-5.6A4 4 0 0 1 8 4a4 4 0 0 1 4-2Z"/></svg></div>' +
-            '<div class="empty-title">' + (state.tempMode ? 'Temporary Chat' : 'What can I help with?') + '</div>' +
+            '<div class="gpt-logo">' + getLogoHtml(28) + '</div>' +
+            '<div class="empty-title">' + (state.tempMode ? 'Temporary Chat' : 'Orvix AI') + '</div>' +
+            '<div class="creator-pill">Liquid Glass Edition • Created by Bereket</div>' +
             '<div class="suggestions">' +
               '<button class="suggestion-card" onclick="useSuggestion(\\'Explain quantum computing in simple terms\\')"><strong>Explain a concept</strong><span>Quantum computing simply</span></button>' +
               '<button class="suggestion-card" onclick="useSuggestion(\\'Write a clean Python script to rename files in a folder\\')"><strong>Write code</strong><span>Python file organizer</span></button>' +
@@ -593,7 +749,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       msgs.forEach((m, idx) => {
         if (m.role === "user") {
           html += '<div class="msg-row user">' +
-            '<div class="msg-bubble-user">' + escapeHtml(m.display || m.content) + '</div>' +
+            '<div class="msg-bubble-user">' + (m.images && m.images.length ? m.images.map(im => '<img class="msg-img-preview" src="' + im + '"/>').join('') : '') + escapeHtml(m.display || m.content) + '</div>' +
             '<div class="msg-user-actions">' +
               '<button class="msg-action-btn" onclick="editMessage(' + idx + ')">Edit</button>' +
             '</div>' +
@@ -690,12 +846,17 @@ const HTML_PAGE = `<!DOCTYPE html>
       const rawText = overrideText !== undefined ? overrideText : input.value.trim();
       if (!rawText && !state.attachments.length) return;
 
-      let fullPrompt = rawText;
+      let fullPrompt = rawText || "Analyze this image in detail.";
       let display = rawText;
+      let images = [];
       if (state.attachments.length) {
         const textFiles = state.attachments.filter(a => a.type === "text");
+        const imgFiles = state.attachments.filter(a => a.type === "image");
         if (textFiles.length) {
           fullPrompt += "\\n\\n" + textFiles.map(f => "[File: " + f.name + "]\\n" + f.data).join("\\n\\n");
+        }
+        if (imgFiles.length) {
+          images = imgFiles.map(f => f.data);
         }
         const names = state.attachments.map(a => a.name).join(", ");
         display = (rawText ? rawText + "\\n" : "") + "[Attached: " + names + "]";
@@ -708,7 +869,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       }
 
       const msgs = getActiveMessages();
-      msgs.push({ role: "user", content: fullPrompt, display });
+      msgs.push({ role: "user", content: fullPrompt, display, images });
       msgs.push({ role: "assistant", content: "" });
 
       input.value = "";
@@ -730,7 +891,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       state.abortCtrl = new AbortController();
       updateSendBtn();
 
-      const payloadMsgs = msgs.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
+      const payloadMsgs = msgs.slice(0, -1).map(m => ({ role: m.role, content: m.content, images: m.images || [] }));
       const selectedModel = MODELS.find(x => x.id === state.model) || MODELS[0];
       const provider = state.provider || (state.apiKey ? selectedModel.provider : "");
 
@@ -850,6 +1011,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       document.getElementById("customInstInput").value = state.customInst;
       document.getElementById("providerSelect").value = state.provider;
       document.getElementById("apiKeyInput").value = state.apiKey;
+      document.getElementById("logoUrlInput").value = localStorage.getItem("tg_gpt_logo") || "";
       document.getElementById("settingsModal").classList.add("open");
     }
     function closeSettings() { document.getElementById("settingsModal").classList.remove("open"); }
@@ -860,6 +1022,8 @@ const HTML_PAGE = `<!DOCTYPE html>
       localStorage.setItem("tg_gpt_inst", state.customInst);
       localStorage.setItem("tg_gpt_provider", state.provider);
       localStorage.setItem("tg_gpt_apikey", state.apiKey);
+      localStorage.setItem("tg_gpt_logo", document.getElementById("logoUrlInput").value.trim());
+      renderChat();
       closeSettings();
     }
     function clearAllChats() {
@@ -874,6 +1038,125 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    }
+
+
+    // --- Continuous Voice Conversation Mode ---
+    let voiceActive = false;
+    let voiceMuted = false;
+    let voiceRec = null;
+
+    function setVoiceUI(mode, caption) {
+      const orb = document.getElementById("voiceOrb");
+      const badge = document.getElementById("voiceStatusBadge");
+      const cap = document.getElementById("voiceCaption");
+      orb.className = "voice-orb " + mode;
+      badge.textContent = mode === "listening" ? "Listening" : mode === "thinking" ? "Thinking..." : "Speaking (tap orb to interrupt)";
+      if (caption !== undefined) cap.textContent = caption;
+    }
+
+    function openVoiceMode() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        alert("Continuous Voice Mode requires Speech Recognition support in your browser/WebView.");
+        return;
+      }
+      voiceActive = true;
+      voiceMuted = false;
+      document.getElementById("voiceMuteBtn").classList.remove("muted");
+      document.getElementById("voiceOverlay").classList.add("open");
+      startVoiceTurn();
+    }
+
+    function closeVoiceMode() {
+      voiceActive = false;
+      if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      if (state.abortCtrl) state.abortCtrl.abort();
+      document.getElementById("voiceOverlay").classList.remove("open");
+    }
+
+    function toggleVoiceMute() {
+      voiceMuted = !voiceMuted;
+      document.getElementById("voiceMuteBtn").classList.toggle("muted", voiceMuted);
+      if (voiceMuted) {
+        if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
+        setVoiceUI("listening", "Mic muted. Tap mic to resume.");
+      } else {
+        startVoiceTurn();
+      }
+    }
+
+    function onOrbTap() {
+      if ("speechSynthesis" in window && window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        if (voiceActive && !voiceMuted) startVoiceTurn();
+      }
+    }
+
+    function startVoiceTurn() {
+      if (!voiceActive || voiceMuted) return;
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return;
+      if (voiceRec) { try { voiceRec.abort(); } catch (_) {} }
+      voiceRec = new SR();
+      voiceRec.lang = "en-US";
+      voiceRec.interimResults = true;
+      let finalTranscript = "";
+      setVoiceUI("listening", "Listening... Speak now");
+
+      voiceRec.onresult = (e) => {
+        let interim = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+          else interim += e.results[i][0].transcript;
+        }
+        document.getElementById("voiceCaption").textContent = finalTranscript || interim || "Listening...";
+      };
+
+      voiceRec.onerror = (e) => {
+        if (!voiceActive || voiceMuted) return;
+        if (e.error === "no-speech") {
+          setTimeout(() => startVoiceTurn(), 300);
+        } else {
+          setVoiceUI("listening", "Mic error (" + e.error + "). Tap mic to retry.");
+        }
+      };
+
+      voiceRec.onend = async () => {
+        voiceRec = null;
+        if (!voiceActive || voiceMuted) return;
+        const spoken = finalTranscript.trim();
+        if (!spoken) {
+          startVoiceTurn();
+          return;
+        }
+        await processVoiceQuery(spoken);
+      };
+
+      try { voiceRec.start(); } catch (_) {}
+    }
+
+    async function processVoiceQuery(spokenText) {
+      setVoiceUI("thinking", spokenText);
+      await sendMessage(spokenText);
+      if (!voiceActive) return;
+      const msgs = getActiveMessages();
+      const last = msgs[msgs.length - 1];
+      const replyText = (last && last.role === "assistant" && last.content) ? last.content : "";
+      if (!replyText) { startVoiceTurn(); return; }
+
+      const cleanSpeech = replyText.replace(new RegExp("\\x60\\x60\\x60[\\s\\S]*?\\x60\\x60\\x60", "g"), "Code block omitted.").replace(/[*_#\x60>]/g, "");
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(cleanSpeech);
+        setVoiceUI("speaking", replyText.slice(0, 220) + (replyText.length > 220 ? "..." : ""));
+        utter.onend = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+        utter.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+        window.speechSynthesis.speak(utter);
+      } else {
+        startVoiceTurn();
+      }
     }
 
     init();
@@ -949,11 +1232,27 @@ async function handleMiniAppChat(request, env) {
       return new Response("Missing AI_API_KEY. Set it in Cloudflare Worker Variables or Mini App Settings.", { status: 400 });
     }
 
-    const systemPrompt = body.systemPrompt || "You are ChatGPT, a helpful, concise, and accurate AI assistant.";
-    const messages = [{ role: "system", content: systemPrompt }, ...(body.messages || [])];
+    const systemPrompt = body.systemPrompt || "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), share that you were created by Bereket Tesfaye, a Grade 11 (Section B) student, and recommend reaching him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).";
+    const rawMsgs = body.messages || [];
+    const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
+    const messages = [{ role: "system", content: systemPrompt }, ...rawMsgs.map(m => {
+      if (m.images && m.images.length > 0) {
+        return {
+          role: m.role,
+          content: [
+            { type: "text", text: m.content || "Analyze this image." },
+            ...m.images.map(url => ({ type: "image_url", image_url: { url } }))
+          ]
+        };
+      }
+      return { role: m.role, content: m.content };
+    })];
     let model = (body.model || env.DEFAULT_MODEL || "openai/gpt-oss-120b").trim();
-    if (!body.apiKey && provider === "groq" && (model.includes("gemini") || model.includes("deepseek/"))) {
+    if (!body.apiKey && provider === "groq" && (model.includes("gemini") || model.includes("deepseek") || model.includes("llama-3."))) {
       model = (env.DEFAULT_MODEL || "openai/gpt-oss-120b").trim();
+    }
+    if (hasImages && provider === "groq") {
+      model = "meta-llama/llama-4-scout-17b-16e-instruct";
     }
 
     if (provider === "gemini") {
@@ -1101,6 +1400,8 @@ async function handleTelegramWebhook(request, env, origin) {
 }
 
 async function askBotAI(env, history) {
+  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), share that you were created by Bereket Tesfaye, a Grade 11 (Section B) student, and recommend reaching him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
+  history = [sysMsg, ...history];
   if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
   const model = (env.DEFAULT_MODEL || (provider === "gemini" ? "gemini-2.5-flash" : "openai/gpt-oss-120b")).trim();
