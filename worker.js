@@ -1541,7 +1541,7 @@ async function handleMiniAppChat(request, env) {
       ? " Provide a thorough, well-structured Deep Research analysis with clear sections, key insights, and practical takeaways."
       : "";
     const voiceNote = body.fastVoice ? " Speak like a warm, natural human friend in a live voice call—reply in 1 short, expressive sentence with no markdown or lists." : deepNote;
-    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
+    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
     const rawMsgs = body.messages || [];
     const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
     const messages = [{ role: "system", content: systemPrompt }, ...rawMsgs.map(m => {
@@ -1762,8 +1762,9 @@ async function handleTelegramWebhook(request, env, origin) {
     const dataUrl = "data:image/jpeg;base64," + btoa(bin);
     const caption = (msg.caption || "Analyze this image in detail.").trim();
     const reply = await askBotVision(env, caption, dataUrl);
-    for (let i = 0; i < reply.length; i += 4000) {
-      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: reply.slice(i, i + 4000) });
+    const cleanVis = reply.replace(/\*{1,3}/g, "").replace(/^#{1,6}\s+/gm, "").trim();
+    for (let i = 0; i < cleanVis.length; i += 4000) {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: cleanVis.slice(i, i + 4000) });
     }
     return new Response("OK");
   }
@@ -1810,17 +1811,18 @@ async function handleTelegramWebhook(request, env, origin) {
   history.push({ role: "assistant", content: reply });
   botMemory.set(chatId, history);
 
-  for (let i = 0; i < reply.length; i += 4000) {
+  const cleanReply = reply.replace(/\*{1,3}/g, "").replace(/^#{1,6}\s+/gm, "").trim();
+  for (let i = 0; i < cleanReply.length; i += 4000) {
     await tgCall(env.BOT_TOKEN, "sendMessage", {
       chat_id: chatId,
-      text: reply.slice(i, i + 4000)
+      text: cleanReply.slice(i, i + 4000)
     });
   }
   return new Response("OK");
 }
 
 async function askBotAI(env, history) {
-  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
+  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
   history = [sysMsg, ...history];
   if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
