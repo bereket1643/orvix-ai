@@ -1112,6 +1112,10 @@ const HTML_PAGE = `<!DOCTYPE html>
       if ("speechSynthesis" in window && window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
         if (voiceActive && !voiceMuted) startVoiceTurn();
+        return;
+      }
+      if (voiceActive && !voiceMuted && !voiceRec) {
+        startVoiceTurn();
       }
     }
 
@@ -1119,12 +1123,13 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (!voiceActive || voiceMuted) return;
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) return;
-      if (voiceRec) { try { voiceRec.abort(); } catch (_) {} }
+      if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
       voiceRec = new SR();
       voiceRec.lang = "en-US";
       voiceRec.interimResults = true;
       let finalTranscript = "";
-      setVoiceUI("listening", "Listening... Speak now");
+      let hadError = false;
+      setVoiceUI("listening", "Listening... Speak now (or tap orb when done)");
 
       voiceRec.onresult = (e) => {
         let interim = "";
@@ -1136,11 +1141,12 @@ const HTML_PAGE = `<!DOCTYPE html>
       };
 
       voiceRec.onerror = (e) => {
+        hadError = true;
         if (!voiceActive || voiceMuted) return;
         if (e.error === "no-speech") {
-          setTimeout(() => startVoiceTurn(), 300);
+          setVoiceUI("listening", "Did not hear anything. Tap the orb or mic to speak again.");
         } else {
-          setVoiceUI("listening", "Mic error (" + e.error + "). Tap mic to retry.");
+          setVoiceUI("listening", "Tap Allow for mic, then tap the orb to speak (or type below).");
         }
       };
 
@@ -1149,13 +1155,13 @@ const HTML_PAGE = `<!DOCTYPE html>
         if (!voiceActive || voiceMuted) return;
         const spoken = finalTranscript.trim();
         if (!spoken) {
-          startVoiceTurn();
+          if (!hadError) setVoiceUI("listening", "Tap the orb or mic button to speak.");
           return;
         }
         await processVoiceQuery(spoken);
       };
 
-      try { voiceRec.start(); } catch (_) {}
+      try { voiceRec.start(); } catch (_) { hadError = true; }
     }
 
     async function processVoiceQuery(spokenText) {
