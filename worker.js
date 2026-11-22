@@ -597,6 +597,11 @@ const HTML_PAGE = `<!DOCTYPE html>
       return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI" data-sz="' + sz + '" onerror="fallbackLogo(this)"/>';
     }
     function fallbackLogo(img) {
+      if (!img.dataset.triedJpg) {
+        img.dataset.triedJpg = "1";
+        img.src = "https://raw.githubusercontent.com/bereket1643/orvix-ai/main/logo.jpg";
+        return;
+      }
       const sz = img.getAttribute("data-sz") || 28;
       img.outerHTML = '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5"/></svg>';
     }
@@ -808,7 +813,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             '<div class="msg-assistant-wrap">' +
               '<div class="assistant-avatar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg></div>' +
               '<div class="assistant-content">' +
-                (m.content ? renderMarkdown(m.content) : '<div class="analysing-pill"><span class="typing-dot"></span><span>Orvix analysing...</span></div>') +
+                (m.content ? renderMarkdown(m.content) : '<div class="analysing-pill"><span class="typing-dot"></span><span>' + (state.model === "qwen/qwen3.8-27b" ? "Orvix Deep Research analysing..." : "Orvix analysing...") + '</span></div>') +
                 (!state.isGenerating || idx < msgs.length - 1 ? (
                   '<div class="msg-actions">' +
                     '<button class="msg-action-btn" onclick="copyMsg(' + idx + ', this)">Copy</button>' +
@@ -962,6 +967,9 @@ const HTML_PAGE = `<!DOCTYPE html>
       state.abortCtrl = new AbortController();
       updateSendBtn();
 
+      if (!isVoiceMode && state.model === "qwen/qwen3.8-27b") {
+        await new Promise(r => setTimeout(r, 2200));
+      }
       const payloadMsgs = msgs.slice(0, -1).map(m => ({ role: m.role, content: m.content, images: m.images || [] }));
       const selectedModel = MODELS.find(x => x.id === state.model) || MODELS[0];
       const provider = state.provider || (state.apiKey ? selectedModel.provider : "");
@@ -1226,7 +1234,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             if (spoken && !voiceBusy && voiceActive && !voiceMuted) {
               processVoiceQuery(spoken);
             }
-          }, 450);
+          }, 250);
         }
       };
 
@@ -1275,7 +1283,7 @@ const HTML_PAGE = `<!DOCTYPE html>
               const audioBuf = await vCtx.decodeAudioData(buf.slice(0));
               const srcNode = vCtx.createBufferSource();
               srcNode.buffer = audioBuf;
-              srcNode.playbackRate.value = 1.15;
+              srcNode.playbackRate.value = 1.25;
               srcNode.connect(vCtx.destination);
               srcNode.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
               srcNode.start(0);
@@ -1291,7 +1299,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             });
             window._lastVoiceAudioUrl = dataUrl;
             voiceAudio.src = dataUrl;
-            voiceAudio.playbackRate = 1.15;
+            voiceAudio.playbackRate = 1.25;
             voiceAudio.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             voiceAudio.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             await voiceAudio.play();
@@ -1438,7 +1446,7 @@ async function handleMiniAppChat(request, env) {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + apiKey
       },
-      body: JSON.stringify({ model, messages, stream: true, max_tokens: body.fastVoice ? 180 : undefined })
+      body: JSON.stringify({ model, messages, stream: true, max_tokens: body.fastVoice ? 100 : undefined })
     });
 
     if (!upstream.ok) {
