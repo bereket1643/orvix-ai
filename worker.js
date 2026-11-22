@@ -884,8 +884,10 @@ const HTML_PAGE = `<!DOCTYPE html>
         if (imgFiles.length) {
           images = imgFiles.map(f => f.data);
         }
-        const names = state.attachments.map(a => a.name).join(", ");
-        display = (rawText ? rawText + "\\n" : "") + "[Attached: " + names + "]";
+        const nonImgNames = textFiles.map(a => a.name).join(", ");
+        if (nonImgNames) {
+          display = (rawText ? rawText + "\\n" : "") + "[Attached: " + nonImgNames + "]";
+        }
       }
 
       if (!state.tempMode && !state.activeChatId) {
