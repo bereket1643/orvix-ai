@@ -513,7 +513,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     const MODELS = [
       { id: "openai/gpt-oss-120b", label: "ChatGPT 4o", desc: "Great for most tasks (GPT OSS 120B)", provider: "groq" },
       { id: "openai/gpt-oss-20b", label: "ChatGPT 4o-mini", desc: "Fastest for everyday answers", provider: "groq" },
-      { id: "qwen/qwen3.6-27b", label: "ChatGPT o1-mini", desc: "Advanced reasoning & coding", provider: "groq" },
+      { id: "qwen/qwen3.8-27b", label: "ChatGPT o1-mini", desc: "Advanced reasoning & coding", provider: "groq" },
       { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", desc: "Multimodal & fast (if Gemini key set)", provider: "gemini" },
       { id: "deepseek/deepseek-chat-v3-0324:free", label: "DeepSeek V3 (Free)", desc: "Via OpenRouter free tier", provider: "openrouter" }
     ];
@@ -1049,6 +1049,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     let voiceActive = false;
     let voiceMuted = false;
     let voiceRec = null;
+    const voiceAudio = new Audio();
 
     function setVoiceUI(mode, caption) {
       const orb = document.getElementById("voiceOrb");
@@ -1060,6 +1061,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     }
 
     function openVoiceMode() {
+      try { voiceAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; voiceAudio.play().catch(() => {}); } catch (_) {}
       if ("speechSynthesis" in window) {
         try { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch (_) {}
       }
@@ -1080,6 +1082,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     function closeVoiceMode() {
       voiceActive = false;
       if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
+      try { voiceAudio.pause(); voiceAudio.currentTime = 0; } catch (_) {}
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       if (state.abortCtrl) state.abortCtrl.abort();
       document.getElementById("voiceOverlay").classList.remove("open");
@@ -1105,6 +1108,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       processVoiceQuery(txt);
     }
     function onOrbTap() {
+      if (!voiceAudio.paused) { voiceAudio.pause(); if (voiceActive && !voiceMuted) startVoiceTurn(); return; }
       if ("speechSynthesis" in window && window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
         if (voiceActive && !voiceMuted) startVoiceTurn();
@@ -1165,23 +1169,39 @@ const HTML_PAGE = `<!DOCTYPE html>
 
       const cleanSpeech = replyText.replace(new RegExp("\\x60\\x60\\x60[\\s\\S]*?\\x60\\x60\\x60", "g"), "Code block omitted.").replace(/[*_#\x60>]/g, "");
       setVoiceUI("speaking", replyText.slice(0, 260) + (replyText.length > 260 ? "..." : ""));
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(cleanSpeech);
-        let done = false;
-        const finish = () => {
-          if (done) return;
-          done = true;
-          if (voiceActive && !voiceMuted) startVoiceTurn();
-        };
-        utter.onend = finish;
-        utter.onerror = finish;
-        window.speechSynthesis.speak(utter);
-        setTimeout(() => {
-          if (!done && !window.speechSynthesis.speaking) finish();
-        }, 2500);
-      } else {
-        setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 2500);
+      let played = false;
+      try {
+        const ttsRes = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: cleanSpeech.slice(0, 600), apiKey: state.apiKey })
+        });
+        if (ttsRes.ok) {
+          const blob = await ttsRes.blob();
+          const url = URL.createObjectURL(blob);
+          voiceAudio.src = url;
+          voiceAudio.onended = () => {
+            URL.revokeObjectURL(url);
+            if (voiceActive && !voiceMuted) startVoiceTurn();
+          };
+          voiceAudio.onerror = () => {
+            URL.revokeObjectURL(url);
+            if (voiceActive && !voiceMuted) startVoiceTurn();
+          };
+          await voiceAudio.play();
+          played = true;
+        }
+      } catch (_) {}
+      if (!played) {
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+          const utter = new SpeechSynthesisUtterance(cleanSpeech);
+          utter.onend = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+          utter.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+          window.speechSynthesis.speak(utter);
+        } else {
+          setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 2500);
+        }
       }
     }
 
@@ -1209,6 +1229,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/chat") {
       return handleMiniAppChat(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/tts") {
+      return handleTTS(request, env);
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {
@@ -1310,6 +1334,39 @@ async function handleMiniAppChat(request, env) {
     });
   } catch (err) {
     return new Response("Server error: " + err.message, { status: 500 });
+  }
+}
+
+
+async function handleTTS(request, env) {
+  try {
+    const { text, apiKey, voice } = await request.json();
+    const key = apiKey || env.AI_API_KEY;
+    if (!key) return new Response("Missing AI_API_KEY", { status: 400 });
+    const clean = String(text || "").slice(0, 800).trim();
+    if (!clean) return new Response("Empty text", { status: 400 });
+
+    const upstream = await fetch("https://api.groq.com/openai/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + key
+      },
+      body: JSON.stringify({
+        model: "canopylabs/orpheus-v1-english",
+        voice: voice || "troy",
+        input: clean,
+        response_format: "wav"
+      })
+    });
+    if (!upstream.ok) {
+      return new Response(await upstream.text(), { status: upstream.status });
+    }
+    return new Response(upstream.body, {
+      headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store" }
+    });
+  } catch (err) {
+    return new Response("TTS error: " + err.message, { status: 500 });
   }
 }
 
