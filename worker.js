@@ -1761,6 +1761,7 @@ async function handleFastVoice(request, env) {
       try {
         const ttsRes = await fetch("https://api.groq.com/openai/v1/audio/speech", {
           method: "POST",
+          signal: AbortSignal.timeout(3500),
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
           body: JSON.stringify({
             model: "canopylabs/orpheus-v1-english",
@@ -1784,7 +1785,7 @@ async function handleFastVoice(request, env) {
       if (!audioBase64) {
         try {
           const gtUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=" + encodeURIComponent(clean);
-          const gtRes = await fetch(gtUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+          const gtRes = await fetch(gtUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(3000) });
           if (gtRes.ok) {
             const buf = new Uint8Array(await gtRes.arrayBuffer());
             let bin = "";
