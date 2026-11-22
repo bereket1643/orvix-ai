@@ -1746,7 +1746,7 @@ async function handleFastVoice(request, env) {
     const llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-      body: JSON.stringify({ model: "openai/gpt-oss-20b", messages: msgs, max_tokens: 60, temperature: 0.65 })
+      body: JSON.stringify({ model: "openai/gpt-oss-20b", messages: msgs, max_tokens: 350, reasoning_effort: "low", temperature: 0.65 })
     });
     if (!llmRes.ok) return Response.json({ error: await llmRes.text() }, { status: llmRes.status });
     const llmData = await llmRes.json();
