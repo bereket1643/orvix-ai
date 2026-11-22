@@ -355,9 +355,55 @@ const HTML_PAGE = `<!DOCTYPE html>
     .seg-btn.active {
       background: var(--accent-btn); color: var(--accent-btn-text); border-color: transparent;
     }
+
+    /* Pro Launch Splash Screen */
+    .splash-screen {
+      position: fixed; inset: 0; z-index: 120;
+      background: radial-gradient(circle at 50% 40%, #102536 0%, #0b0f14 70%, #07090d 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .splash-screen.hide { opacity: 0; transform: scale(1.04); pointer-events: none; }
+    .splash-ring {
+      width: 96px; height: 96px; border-radius: 50%; padding: 4px;
+      background: conic-gradient(from 0deg, #38bdf8, #10a37f, #818cf8, #38bdf8);
+      box-shadow: 0 0 50px rgba(56, 189, 248, 0.45);
+      animation: splashPop 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .splash-inner {
+      width: 100%; height: 100%; border-radius: 50%; overflow: hidden; background: #0b0f14;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .splash-inner img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+    .splash-title {
+      font-size: 24px; font-weight: 700; letter-spacing: 0.02em; color: #f8fafc;
+      opacity: 0; animation: splashFadeUp 0.55s 0.2s ease forwards;
+    }
+    .splash-bar {
+      width: 120px; height: 3px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden;
+      opacity: 0; animation: splashFadeUp 0.5s 0.3s ease forwards;
+    }
+    .splash-bar-fill {
+      width: 45%; height: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, #10a37f, #38bdf8);
+      animation: splashSlide 1.1s infinite ease-in-out;
+    }
+    @keyframes splashPop { 0% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
+    @keyframes splashFadeUp { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes splashSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
   </style>  </style>
 </head>
 <body>
+  <div id="splashScreen" class="splash-screen">
+    <div class="splash-ring">
+      <div class="splash-inner">
+        <img src="/logo.png" alt="Orvix AI" onerror="this.style.display='none'"/>
+      </div>
+    </div>
+    <div class="splash-title">Orvix AI</div>
+    <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+  </div>
   <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar(false)"></div>
   <aside id="sidebar" class="sidebar">
     <div class="sidebar-top">
@@ -579,6 +625,10 @@ const HTML_PAGE = `<!DOCTYPE html>
       renderModelMenu();
       renderSidebar();
       renderChat();
+      setTimeout(() => {
+        const sp = document.getElementById("splashScreen");
+        if (sp) { sp.classList.add("hide"); setTimeout(() => { sp.style.display = "none"; }, 480); }
+      }, 1200);
     }
 
 
