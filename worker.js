@@ -1522,9 +1522,34 @@ async function handleTelegramWebhook(request, env, origin) {
   if (!env.BOT_TOKEN) return new Response("BOT_TOKEN missing", { status: 500 });
   const update = await request.json();
   const msg = update.message;
-  if (!msg || !msg.text) return new Response("OK");
+  if (!msg || (!msg.text && !msg.photo)) return new Response("OK");
 
   const chatId = msg.chat.id;
+  if (msg.photo && msg.photo.length > 0) {
+    await tgCall(env.BOT_TOKEN, "sendChatAction", { chat_id: chatId, action: "typing" });
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    const fRes = await fetch("https://api.telegram.org/bot" + env.BOT_TOKEN + "/getFile?file_id=" + fileId);
+    const fData = await fRes.json();
+    const filePath = fData.result && fData.result.file_path;
+    if (!filePath) {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "Could not download image from Telegram." });
+      return new Response("OK");
+    }
+    const imgRes = await fetch("https://api.telegram.org/file/bot" + env.BOT_TOKEN + "/" + filePath);
+    const buf = new Uint8Array(await imgRes.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i += 8192) {
+      bin += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
+    }
+    const dataUrl = "data:image/jpeg;base64," + btoa(bin);
+    const caption = (msg.caption || "Analyze this image in detail.").trim();
+    const reply = await askBotVision(env, caption, dataUrl);
+    for (let i = 0; i < reply.length; i += 4000) {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: reply.slice(i, i + 4000) });
+    }
+    return new Response("OK");
+  }
+
   const text = msg.text.trim();
 
   if (text === "/start") {
@@ -1610,6 +1635,49 @@ async function askBotAI(env, history) {
   });
   const data = await res.json();
   return data.choices?.[0]?.message?.content || data.error?.message || "No response from AI.";
+}
+
+
+async function askBotVision(env, prompt, dataUrl) {
+  if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
+  const provider = (env.AI_PROVIDER || "groq").toLowerCase();
+  if (provider === "gemini") {
+    const b64 = dataUrl.split(",")[1] || "";
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + env.AI_API_KEY;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: b64 } }] }]
+      })
+    });
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini.";
+  }
+
+  const endpoint = provider === "openrouter"
+    ? "https://openrouter.ai/api/v1/chat/completions"
+    : "https://api.groq.com/openai/v1/chat/completions";
+  const model = provider === "openrouter" ? "qwen/qwen2.5-vl-72b-instruct:free" : "qwen/qwen3.8-27b";
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + env.AI_API_KEY
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: dataUrl } }
+        ]
+      }]
+    })
+  });
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || data.error?.message || "Could not analyze image.";
 }
 
 async function tgCall(token, method, payload) {
