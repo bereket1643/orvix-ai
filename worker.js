@@ -441,6 +441,10 @@ const HTML_PAGE = `<!DOCTYPE html>
       <div id="voiceOrb" class="voice-orb listening" onclick="onOrbTap()"></div>
       <div id="voiceCaption" class="voice-caption">Listening... Speak now</div>
     </div>
+    <div style="width:100%; max-width:420px; display:flex; gap:8px; margin-bottom:12px;">
+      <input id="voiceFallbackInput" class="field-input" type="text" placeholder="Or type / use keyboard mic here..." onkeydown="if(event.key===\Enter\) sendVoiceFallback()" />
+      <button class="btn-primary" onclick="sendVoiceFallback()">Send</button>
+    </div>
     <div class="voice-controls">
       <button id="voiceMuteBtn" class="voice-ctrl-btn" onclick="toggleVoiceMute()" title="Mute/Unmute">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
@@ -1056,9 +1060,14 @@ const HTML_PAGE = `<!DOCTYPE html>
     }
 
     function openVoiceMode() {
+      if ("speechSynthesis" in window) {
+        try { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch (_) {}
+      }
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) {
-        alert("Continuous Voice Mode requires Speech Recognition support in your browser/WebView.");
+        voiceActive = true;
+        document.getElementById("voiceOverlay").classList.add("open");
+        setVoiceUI("listening", "Your Telegram WebView does not support auto-mic. Use your keyboard mic below or open in Chrome.");
         return;
       }
       voiceActive = true;
@@ -1087,6 +1096,14 @@ const HTML_PAGE = `<!DOCTYPE html>
       }
     }
 
+    function sendVoiceFallback() {
+      const inp = document.getElementById("voiceFallbackInput");
+      const txt = inp.value.trim();
+      if (!txt) return;
+      inp.value = "";
+      if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
+      processVoiceQuery(txt);
+    }
     function onOrbTap() {
       if ("speechSynthesis" in window && window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
@@ -1147,15 +1164,24 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (!replyText) { startVoiceTurn(); return; }
 
       const cleanSpeech = replyText.replace(new RegExp("\\x60\\x60\\x60[\\s\\S]*?\\x60\\x60\\x60", "g"), "Code block omitted.").replace(/[*_#\x60>]/g, "");
+      setVoiceUI("speaking", replyText.slice(0, 260) + (replyText.length > 260 ? "..." : ""));
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         const utter = new SpeechSynthesisUtterance(cleanSpeech);
-        setVoiceUI("speaking", replyText.slice(0, 220) + (replyText.length > 220 ? "..." : ""));
-        utter.onend = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
-        utter.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          if (voiceActive && !voiceMuted) startVoiceTurn();
+        };
+        utter.onend = finish;
+        utter.onerror = finish;
         window.speechSynthesis.speak(utter);
+        setTimeout(() => {
+          if (!done && !window.speechSynthesis.speaking) finish();
+        }, 2500);
       } else {
-        startVoiceTurn();
+        setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 2500);
       }
     }
 
