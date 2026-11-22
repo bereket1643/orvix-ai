@@ -277,121 +277,87 @@ const HTML_PAGE = `<!DOCTYPE html>
       background: var(--text-primary); animation: pulse 1s infinite; margin-left: 4px;
     }
 
-    /* Voice Conversation Mode Overlay (ChatGPT-Style) */
+    /* Voice Conversation Mode Overlay (ChatGPT / Gemini Live Style) */
     .voice-overlay {
       position: fixed; inset: 0; z-index: 90;
-      background: radial-gradient(circle at 50% 42%, #132238 0%, #090d14 70%, #05070a 100%);
+      background: radial-gradient(circle at 50% 45%, #0c192c 0%, #05080f 70%, #020306 100%);
       color: #f8fafc;
       display: none; flex-direction: column; align-items: center; justify-content: space-between;
-      padding: calc(20px + env(safe-area-inset-top)) 20px calc(30px + env(safe-area-inset-bottom));
+      padding: calc(18px + env(safe-area-inset-top)) 20px calc(32px + env(safe-area-inset-bottom));
     }
     .voice-overlay.open { display: flex; }
-    .voice-top { width: 100%; display: flex; justify-content: space-between; align-items: center; }
+    .voice-top { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .voice-status-badge {
-      font-size: 13px; font-weight: 600; color: #e2e8f0;
-      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
-      padding: 6px 14px; border-radius: 999px; backdrop-filter: blur(12px);
+      font-size: 12px; font-weight: 600; color: #e2e8f0;
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+      padding: 6px 12px; border-radius: 999px; backdrop-filter: blur(14px);
     }
-    .voice-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; width: 100%; max-width: 400px; text-align: center; }
+    .voice-center {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 28px; width: 100%; max-width: 400px; text-align: center;
+    }
+    .orb-stage {
+      position: relative; width: 240px; height: 240px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .orb-halo {
+      position: absolute; inset: 12px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(56,189,248,0.35), rgba(99,102,241,0.15) 55%, transparent 72%);
+      filter: blur(18px); transition: transform 0.1s ease-out, opacity 0.2s ease;
+      pointer-events: none;
+    }
     .voice-orb {
-      width: 176px; height: 176px; border-radius: 50%; position: relative; cursor: pointer;
+      width: 174px; height: 174px; border-radius: 50%; position: relative; cursor: pointer;
       background:
-        radial-gradient(circle at 32% 28%, rgba(255,255,255,0.92) 0%, rgba(125,211,252,0.85) 28%, rgba(14,165,233,0.9) 62%, rgba(3,105,161,0.98) 100%);
-      box-shadow: 0 0 60px rgba(56, 189, 248, 0.45), inset 0 0 32px rgba(255,255,255,0.4);
-      transition: transform 0.2s ease, box-shadow 0.25s ease;
+        radial-gradient(circle at 30% 28%, rgba(255,255,255,0.96) 0%, rgba(186,230,253,0.9) 22%, rgba(56,189,248,0.92) 52%, rgba(37,99,235,0.95) 82%, rgba(30,58,138,1) 100%);
+      box-shadow: 0 0 65px rgba(56, 189, 248, 0.45), inset 0 -18px 36px rgba(15,23,42,0.45), inset 0 12px 28px rgba(255,255,255,0.55);
+      transition: transform 0.09s ease-out, border-radius 0.4s ease, box-shadow 0.25s ease;
     }
-    .voice-orb.listening { animation: orbFloat 2.4s infinite ease-in-out; }
+    .voice-orb.listening { animation: liveBreathe 3.2s infinite ease-in-out; }
     .voice-orb.thinking {
-      background: radial-gradient(circle at 35% 30%, #e0e7ff 0%, #818cf8 40%, #4f46e5 85%);
-      box-shadow: 0 0 70px rgba(129, 140, 248, 0.55);
-      animation: orbThink 1.1s infinite linear;
+      background:
+        radial-gradient(circle at 32% 28%, #ffffff 0%, #c7d2fe 28%, #818cf8 60%, #4338ca 100%);
+      box-shadow: 0 0 80px rgba(129, 140, 248, 0.65), inset 0 10px 24px rgba(255,255,255,0.5);
+      animation: liveMorph 1.3s infinite ease-in-out;
     }
     .voice-orb.speaking {
-      background: radial-gradient(circle at 35% 30%, #ffffff 0%, #7dd3fc 30%, #0284c7 70%, #0369a1 100%);
-      box-shadow: 0 0 85px rgba(56, 189, 248, 0.75);
-      animation: orbSpeak 0.45s infinite alternate ease-in-out;
+      background:
+        radial-gradient(circle at 32% 28%, #ffffff 0%, #bae6fd 24%, #38bdf8 55%, #0284c7 85%, #0369a1 100%);
+      box-shadow: 0 0 95px rgba(56, 189, 248, 0.8), inset 0 12px 26px rgba(255,255,255,0.6);
+      animation: liveSpeak 0.55s infinite alternate ease-in-out;
     }
-    @keyframes orbFloat { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-    @keyframes orbSpeak { 0% { transform: scale(1); } 100% { transform: scale(1.14); } }
-    @keyframes orbThink { 0% { transform: scale(0.96) rotate(0deg); } 50% { transform: scale(1.04) rotate(180deg); } 100% { transform: scale(0.96) rotate(360deg); } }
-    .voice-caption { font-size: 16px; line-height: 1.5; color: rgba(248,250,252,0.86); min-height: 48px; max-height: 130px; overflow-y: auto; padding: 0 14px; font-weight: 400; }
+    @keyframes liveBreathe {
+      0%,100% { transform: scale(1); border-radius: 50%; }
+      50% { transform: scale(1.045); border-radius: 48% 52% 51% 49% / 50% 48% 52% 50%; }
+    }
+    @keyframes liveMorph {
+      0% { transform: scale(0.96) rotate(0deg); border-radius: 46% 54% 52% 48% / 52% 46% 54% 48%; }
+      50% { transform: scale(1.05) rotate(180deg); border-radius: 54% 46% 48% 52% / 48% 54% 46% 52%; }
+      100% { transform: scale(0.96) rotate(360deg); border-radius: 46% 54% 52% 48% / 52% 46% 54% 48%; }
+    }
+    @keyframes liveSpeak {
+      0% { transform: scale(0.99); border-radius: 50%; }
+      100% { transform: scale(1.11); border-radius: 47% 53% 49% 51% / 52% 48% 52% 48%; }
+    }
+    .voice-caption {
+      font-size: 17px; line-height: 1.5; color: rgba(248,250,252,0.9);
+      min-height: 52px; max-height: 130px; overflow-y: auto; padding: 0 16px;
+      font-weight: 400; letter-spacing: -0.01em; transition: opacity 0.2s ease;
+    }
+    .voice-caption.hidden { opacity: 0; pointer-events: none; }
+    .live-hint { font-size: 12px; color: rgba(148,163,184,0.75); letter-spacing: 0.02em; }
     .voice-fallback-row { width: 100%; max-width: 380px; display: none; gap: 8px; margin-bottom: 14px; }
     .voice-fallback-row.open { display: flex; }
-    .voice-controls { display: flex; align-items: center; gap: 22px; }
+    .voice-controls { display: flex; align-items: center; gap: 18px; }
     .voice-ctrl-btn {
-      width: 58px; height: 58px; border-radius: 50%; background: rgba(255,255,255,0.1);
+      width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.09);
       border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;
-      color: #f8fafc; font-size: 20px; backdrop-filter: blur(12px);
+      color: #f8fafc; font-size: 19px; backdrop-filter: blur(14px); transition: background 0.15s, transform 0.1s;
     }
-    .voice-ctrl-btn.end { background: #ef4444; color: #fff; border-color: transparent; }
-    .voice-ctrl-btn.muted { background: rgba(239, 68, 68, 0.25); color: #fca5a5; }
-
-    .gpt-logo { width: 72px !important; height: 72px !important; flex-shrink: 0; border-radius: 50%; overflow: hidden; }
-    .gpt-logo img { width: 72px !important; height: 72px !important; object-fit: cover; border-radius: 50%; display: block; }
-    .analysing-pill { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border); font-size: 13px; font-weight: 500; color: var(--text-secondary); backdrop-filter: blur(12px); }
-    .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
-    .user-meta { display: flex; flex-direction: column; min-width: 0; }
-    .user-handle { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .about-creator { padding: 10px 12px 12px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
-    .about-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    .about-links { display: flex; gap: 8px; flex-wrap: wrap; }
-    .about-link { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); text-decoration: none; font-size: 12px; font-weight: 500; }
-
-    .sidebar, .model-menu, .modal {
-      background: rgba(20, 24, 32, 0.78) !important;
-      backdrop-filter: blur(22px) !important;
-      -webkit-backdrop-filter: blur(22px) !important;
-      border-color: var(--glass-border) !important;
-    }
-    html.light .sidebar, html.light .model-menu, html.light .modal {
-      background: rgba(255, 255, 255, 0.78) !important;
-    }
-    .seg-group { display: flex; gap: 8px; }
-    .seg-btn {
-      flex: 1; padding: 9px 12px; border-radius: 12px; font-size: 13px; font-weight: 600;
-      background: var(--glass-bg); border: 1px solid var(--glass-border);
-      color: var(--text-secondary); backdrop-filter: blur(12px); transition: all 0.15s;
-    }
-    .seg-btn.active {
-      background: var(--accent-btn); color: var(--accent-btn-text); border-color: transparent;
-    }
-
-    /* Pro Launch Splash Screen */
-    .splash-screen {
-      position: fixed; inset: 0; z-index: 120;
-      background: radial-gradient(circle at 50% 40%, #102536 0%, #0b0f14 70%, #07090d 100%);
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-      transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .splash-screen.hide { opacity: 0; transform: scale(1.04); pointer-events: none; }
-    .splash-ring {
-      width: 96px; height: 96px; border-radius: 50%; padding: 4px;
-      background: conic-gradient(from 0deg, #38bdf8, #10a37f, #818cf8, #38bdf8);
-      box-shadow: 0 0 50px rgba(56, 189, 248, 0.45);
-      animation: splashPop 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .splash-inner {
-      width: 100%; height: 100%; border-radius: 50%; overflow: hidden; background: #0b0f14;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .splash-inner img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
-    .splash-title {
-      font-size: 24px; font-weight: 700; letter-spacing: 0.02em; color: #f8fafc;
-      opacity: 0; animation: splashFadeUp 0.55s 0.2s ease forwards;
-    }
-    .splash-bar {
-      width: 120px; height: 3px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden;
-      opacity: 0; animation: splashFadeUp 0.5s 0.3s ease forwards;
-    }
-    .splash-bar-fill {
-      width: 45%; height: 100%; border-radius: 999px;
-      background: linear-gradient(90deg, #10a37f, #38bdf8);
-      animation: splashSlide 1.1s infinite ease-in-out;
-    }
-    @keyframes splashPop { 0% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
-    @keyframes splashFadeUp { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
-    @keyframes splashSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+    .voice-ctrl-btn:active { transform: scale(0.93); }
+    .voice-ctrl-btn.end { background: #ef4444; color: #fff; border-color: transparent; width: 62px; height: 62px; }
+    .voice-ctrl-btn.muted { background: rgba(239, 68, 68, 0.28); color: #fca5a5; }
+    .voice-ctrl-btn.on { background: rgba(56, 189, 248, 0.24); border-color: rgba(56, 189, 248, 0.45); color: #7dd3fc; }
 
     .composer-box {
       box-shadow: 0 0 24px rgba(56, 189, 248, 0.22), 0 0 48px rgba(139, 92, 246, 0.14), 0 8px 30px rgba(0, 0, 0, 0.25) !important;
@@ -402,34 +368,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       box-shadow: 0 0 32px rgba(56, 189, 248, 0.42), 0 0 60px rgba(16, 163, 127, 0.24) !important;
       border-color: rgba(56, 189, 248, 0.65) !important;
     }
-    .orb-stage {
-      position: relative; width: 230px; height: 230px;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .radial-bars {
-      position: absolute; inset: 0; pointer-events: none;
-    }
-    .r-bar {
-      position: absolute; left: 50%; top: 50%; width: 3px; height: 14px;
-      margin-left: -1.5px; border-radius: 999px;
-      background: linear-gradient(180deg, #38bdf8, #10a37f);
-      transform-origin: 50% 108px;
-      opacity: 0.45; transition: height 0.14s ease, opacity 0.15s ease;
-    }
-    .radial-bars.active .r-bar {
-      opacity: 0.95; animation: radialPulse 0.65s infinite ease-in-out alternate;
-    }
-    @keyframes radialPulse { 0% { height: 10px; } 100% { height: 26px; } }
-    .orvix-meter-pill {
-      display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px;
-      border-radius: 999px; background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(125,211,252,0.22); backdrop-filter: blur(14px);
-      font-size: 12px; color: #cbd5e1;
-    }
-    .wave-dot { width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 10px #38bdf8; }
-    .mic-meter-bg { width: 58px; height: 5px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; }
-    .mic-meter-fill { width: 25%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10a37f, #38bdf8); transition: width 0.15s ease; }
-  </style>  </style>  </style>
+  </style>  </style>  </style>  </style>
 </head>
 <body>
   <div id="splashScreen" class="splash-screen">
@@ -536,26 +475,23 @@ const HTML_PAGE = `<!DOCTYPE html>
     </div>
     <div class="voice-center">
       <div class="orb-stage">
-        <div id="waveBars" class="radial-bars active"></div>
+        <div id="orbHalo" class="orb-halo"></div>
         <div id="voiceOrb" class="voice-orb listening" onclick="onOrbTap()"></div>
       </div>
-      <div id="voiceCaption" class="voice-caption">Listening... Speak now</div>
-      <div class="orvix-meter-pill">
-        <span class="wave-dot"></span>
-        <span id="waveStateText">Orvix Listening</span>
-        <div class="mic-meter-bg"><div id="micMeterFill" class="mic-meter-fill"></div></div>
-      </div>
+      <div id="voiceCaption" class="voice-caption">Listening...</div>
+      <div id="liveHint" class="live-hint">Speak naturally • Tap orb to interrupt</div>
     </div>
     <div id="voiceFallbackRow" class="voice-fallback-row">
-      <input id="voiceFallbackInput" class="field-input" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.18);" type="text" placeholder="Type to Orvix..." onkeydown="if(event.key===\\'Enter\\') sendVoiceFallback()" />
+      <input id="voiceFallbackInput" class="field-input" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.18);" type="text" placeholder="Type to Orvix..." onkeydown="if(event.key==='Enter') sendVoiceFallback()" />
       <button class="btn-primary" style="background:#38bdf8;color:#082f49;" onclick="sendVoiceFallback()">Send</button>
     </div>
     <div class="voice-controls">
       <button id="voiceMuteBtn" class="voice-ctrl-btn" onclick="toggleVoiceMute()" title="Mute/Unmute">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
       </button>
+      <button id="voiceCcBtn" class="voice-ctrl-btn on" onclick="toggleVoiceCaptions()" title="Toggle Captions">CC</button>
       <button class="voice-ctrl-btn" onclick="document.getElementById('voiceFallbackRow').classList.toggle('open')" title="Type message">⌨️</button>
-      <button class="voice-ctrl-btn end" onclick="closeVoiceMode()" title="End Voice Mode">✕</button>
+      <button class="voice-ctrl-btn end" onclick="closeVoiceMode()" title="End Call">✕</button>
     </div>
   </div>
 
@@ -1312,18 +1248,41 @@ const HTML_PAGE = `<!DOCTYPE html>
     let lastAIReplyWords = [];
 
 
-    (function buildWaveBars() {
-      const wb = document.getElementById("waveBars");
-      if (!wb) return;
-      let h = "";
-      const count = 32;
-      for (let i = 0; i < count; i++) {
-        const deg = (i * (360 / count)).toFixed(1);
-        const delay = ((i % 8) * 0.08).toFixed(2);
-        h += '<div class="r-bar" style="top:4px;transform:rotate(' + deg + 'deg);animation-delay:' + delay + 's"></div>';
+    let showVoiceCaptions = true;
+    let voiceAnalyser = null;
+    let orbRaf = null;
+
+    function toggleVoiceCaptions() {
+      showVoiceCaptions = !showVoiceCaptions;
+      const cap = document.getElementById("voiceCaption");
+      const btn = document.getElementById("voiceCcBtn");
+      if (cap) cap.classList.toggle("hidden", !showVoiceCaptions);
+      if (btn) btn.classList.toggle("on", showVoiceCaptions);
+    }
+
+    function startOrbAudioLoop() {
+      if (!voiceAnalyser) return;
+      const data = new Uint8Array(voiceAnalyser.frequencyBinCount);
+      const orb = document.getElementById("voiceOrb");
+      const halo = document.getElementById("orbHalo");
+      function tick() {
+        if (!isAISpeaking || !voiceAnalyser) {
+          if (orb) orb.style.transform = "";
+          if (halo) halo.style.transform = "";
+          orbRaf = null;
+          return;
+        }
+        voiceAnalyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < 16; i++) sum += data[i];
+        const avg = sum / 16 / 255;
+        const sc = 1 + avg * 0.24;
+        if (orb) orb.style.transform = "scale(" + sc.toFixed(3) + ")";
+        if (halo) halo.style.transform = "scale(" + (1 + avg * 0.42).toFixed(3) + ")";
+        orbRaf = requestAnimationFrame(tick);
       }
-      wb.innerHTML = h;
-    })();
+      if (!orbRaf) orbRaf = requestAnimationFrame(tick);
+    }
 
     function setVoiceUI(mode, caption) {
       const orb = document.getElementById("voiceOrb");
@@ -1332,12 +1291,8 @@ const HTML_PAGE = `<!DOCTYPE html>
       orb.className = "voice-orb " + mode;
       badge.textContent = mode === "listening" ? "Listening" : mode === "thinking" ? "Thinking..." : "Speaking (tap orb to interrupt)";
       if (caption !== undefined) cap.textContent = caption;
-      const wt = document.getElementById("waveStateText");
-      const wb = document.getElementById("waveBars");
-      const mf = document.getElementById("micMeterFill");
-      if (wt) wt.textContent = mode === "listening" ? "Listening for voice..." : mode === "thinking" ? "Thinking..." : "Speaking...";
-      if (wb) wb.classList.toggle("active", mode === "listening" || mode === "speaking");
-      if (mf) mf.style.width = mode === "speaking" ? "85%" : mode === "thinking" ? "45%" : "25%";
+      const lh = document.getElementById("liveHint");
+      if (lh) lh.textContent = mode === "listening" ? "Listening • Speak naturally" : mode === "thinking" ? "Orvix is thinking..." : "Speaking • Tap orb to interrupt";
     }
 
     function openVoiceMode() {
@@ -1522,7 +1477,11 @@ const HTML_PAGE = `<!DOCTYPE html>
               speakStartedAt = Date.now();
               srcNode.buffer = audioBuf;
               srcNode.playbackRate.value = cfg.rate;
-              srcNode.connect(vCtx.destination);
+              voiceAnalyser = vCtx.createAnalyser();
+              voiceAnalyser.fftSize = 64;
+              srcNode.connect(voiceAnalyser);
+              voiceAnalyser.connect(vCtx.destination);
+              startOrbAudioLoop();
               srcNode.onended = () => { isAISpeaking = false; activeVoiceNode = null; voiceIgnoreUntil = Date.now() + 950; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 750); };
               srcNode.start(0);
               played = true;
