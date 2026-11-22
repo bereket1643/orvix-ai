@@ -846,7 +846,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       )).join("");
     }
 
-    async function sendMessage(overrideText) {
+    async function sendMessage(overrideText, isVoiceMode) {
       const input = document.getElementById("promptInput");
       const rawText = overrideText !== undefined ? overrideText : input.value.trim();
       if (!rawText && !state.attachments.length) return;
@@ -888,10 +888,10 @@ const HTML_PAGE = `<!DOCTYPE html>
       }
       renderSidebar();
       renderChat();
-      await streamResponse(msgs);
+      await streamResponse(msgs, isVoiceMode);
     }
 
-    async function streamResponse(msgs) {
+    async function streamResponse(msgs, isVoiceMode) {
       state.isGenerating = true;
       state.abortCtrl = new AbortController();
       updateSendBtn();
@@ -912,7 +912,8 @@ const HTML_PAGE = `<!DOCTYPE html>
             model: state.model,
             provider,
             apiKey: state.apiKey,
-            systemPrompt: state.customInst
+            systemPrompt: state.customInst,
+            fastVoice: !!isVoiceMode
           }),
           signal: state.abortCtrl.signal
         });
@@ -1161,7 +1162,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             if (spoken && !voiceBusy && voiceActive && !voiceMuted) {
               processVoiceQuery(spoken);
             }
-          }, 1000);
+          }, 450);
         }
       };
 
@@ -1185,7 +1186,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     async function processVoiceQuery(spokenText) {
       voiceBusy = true;
       setVoiceUI("thinking", spokenText);
-      await sendMessage(spokenText);
+      await sendMessage(spokenText, true);
       if (!voiceActive) return;
       const msgs = getActiveMessages();
       const last = msgs[msgs.length - 1];
@@ -1210,6 +1211,7 @@ const HTML_PAGE = `<!DOCTYPE html>
               const audioBuf = await vCtx.decodeAudioData(buf.slice(0));
               const srcNode = vCtx.createBufferSource();
               srcNode.buffer = audioBuf;
+              srcNode.playbackRate.value = 1.15;
               srcNode.connect(vCtx.destination);
               srcNode.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
               srcNode.start(0);
@@ -1225,6 +1227,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             });
             window._lastVoiceAudioUrl = dataUrl;
             voiceAudio.src = dataUrl;
+            voiceAudio.playbackRate = 1.15;
             voiceAudio.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             voiceAudio.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             await voiceAudio.play();
@@ -1327,7 +1330,8 @@ async function handleMiniAppChat(request, env) {
       return new Response("Missing AI_API_KEY. Set it in Cloudflare Worker Variables or Mini App Settings.", { status: 400 });
     }
 
-    const systemPrompt = body.systemPrompt || "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), share that you were created by Bereket Tesfaye, a Grade 11 (Section B) student, and recommend reaching him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).";
+    const voiceNote = body.fastVoice ? " Keep your answer very brief (1 to 2 short spoken sentences)." : "";
+    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), share that you were created by Bereket Tesfaye, a Grade 11 (Section B) student, and recommend reaching him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
     const rawMsgs = body.messages || [];
     const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
     const messages = [{ role: "system", content: systemPrompt }, ...rawMsgs.map(m => {
@@ -1345,6 +1349,9 @@ async function handleMiniAppChat(request, env) {
     let model = (body.model || env.DEFAULT_MODEL || "openai/gpt-oss-120b").trim();
     if (!body.apiKey && provider === "groq" && (model.includes("gemini") || model.includes("deepseek") || model.includes("llama-3."))) {
       model = (env.DEFAULT_MODEL || "openai/gpt-oss-120b").trim();
+    }
+    if (body.fastVoice && provider === "groq" && !hasImages) {
+      model = "openai/gpt-oss-20b";
     }
     if (hasImages && provider === "groq") {
       model = "meta-llama/llama-4-scout-17b-16e-instruct";
@@ -1364,7 +1371,7 @@ async function handleMiniAppChat(request, env) {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + apiKey
       },
-      body: JSON.stringify({ model, messages, stream: true })
+      body: JSON.stringify({ model, messages, stream: true, max_tokens: body.fastVoice ? 180 : undefined })
     });
 
     if (!upstream.ok) {
