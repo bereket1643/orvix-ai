@@ -1715,8 +1715,23 @@ async function getStatsText(env) {
 }
 
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data"
+};
+
+function withCors(res) {
+  const h = new Headers(res.headers);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) h.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
 export default {
   async fetch(request, env) {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/") {
@@ -1770,19 +1785,19 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/chat") {
-      return handleMiniAppChat(request, env);
+      return withCors(await handleMiniAppChat(request, env));
     }
 
     if (request.method === "POST" && url.pathname === "/api/tts") {
-      return handleTTS(request, env);
+      return withCors(await handleTTS(request, env));
     }
 
     if (request.method === "POST" && url.pathname === "/api/voice") {
-      return handleFastVoice(request, env);
+      return withCors(await handleFastVoice(request, env));
     }
 
     if (request.method === "POST" && url.pathname === "/api/suggestions") {
-      return handleSuggestions(request, env);
+      return withCors(await handleSuggestions(request, env));
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {
