@@ -625,6 +625,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       renderModelMenu();
       renderSidebar();
       renderChat();
+      refreshSmartSuggestions();
       setTimeout(() => {
         const sp = document.getElementById("splashScreen");
         if (sp) { sp.classList.add("hide"); setTimeout(() => { sp.style.display = "none"; }, 480); }
@@ -845,12 +846,7 @@ const HTML_PAGE = `<!DOCTYPE html>
           '<div class="empty-state">' +
             '<div class="gpt-logo">' + getLogoHtml(28) + '</div>' +
             '<div class="empty-title">' + (state.tempMode ? 'Temporary Chat' : 'Orvix AI') + '</div>' +
-            '<div class="suggestions">' +
-              '<button class="suggestion-card" onclick="useSuggestion(\\'Explain quantum computing in simple terms\\')"><strong>Explain a concept</strong><span>Quantum computing simply</span></button>' +
-              '<button class="suggestion-card" onclick="useSuggestion(\\'Write a clean Python script to rename files in a folder\\')"><strong>Write code</strong><span>Python file organizer</span></button>' +
-              '<button class="suggestion-card" onclick="useSuggestion(\\'Give me 5 creative startup ideas using AI\\')"><strong>Brainstorm ideas</strong><span>5 AI startup concepts</span></button>' +
-              '<button class="suggestion-card" onclick="useSuggestion(\\'Help me draft a polite follow-up email\\')"><strong>Draft a message</strong><span>Polite follow-up email</span></button>' +
-            '</div>' +
+                        '<div id="suggestionsGrid" class="suggestions">' + renderSuggestionCards(getCurrentSuggestions()) + '</div>' +
           '</div>';
         return;
       }
@@ -885,6 +881,66 @@ const HTML_PAGE = `<!DOCTYPE html>
       html += '</div>';
       scroll.innerHTML = html;
       scroll.scrollTop = scroll.scrollHeight;
+    }
+
+
+    const SUGG_POOL = [
+      { title: "Study faster", subtitle: "Summarize a tough topic", prompt: "Explain the Pomodoro technique and how to study effectively" },
+      { title: "Write code", subtitle: "Build a clean script", prompt: "Write a clean Python script to organize files by type" },
+      { title: "Startup ideas", subtitle: "AI business concepts", prompt: "Give me 5 practical startup ideas I can build with low budget" },
+      { title: "Draft a message", subtitle: "Polite professional reply", prompt: "Help me write a polite and clear follow-up message" },
+      { title: "Learn a skill", subtitle: "30-day roadmap", prompt: "Create a 30-day beginner roadmap to learn web development" },
+      { title: "Daily productivity", subtitle: "Plan my day smartly", prompt: "Help me build a focused daily routine for school and coding" },
+      { title: "Math helper", subtitle: "Step-by-step solving", prompt: "Explain quadratic equations with a simple real-world example" },
+      { title: "English practice", subtitle: "Improve my writing", prompt: "Give me 5 tips to write clearer and more natural English" },
+      { title: "Tech explained", subtitle: "How APIs work", prompt: "Explain how APIs and webhooks work in simple everyday terms" },
+      { title: "Creative writing", subtitle: "Short story spark", prompt: "Give me an intriguing sci-fi short story opening idea" },
+      { title: "Career advice", subtitle: "Stand out early", prompt: "What skills should a high school student learn to prepare for tech?" },
+      { title: "Quick quiz", subtitle: "Test my knowledge", prompt: "Give me a fun 5-question general science quiz" }
+    ];
+    let activeSuggestions = null;
+    let lastSuggSig = "";
+
+    function getCurrentSuggestions() {
+      if (activeSuggestions && activeSuggestions.length) return activeSuggestions;
+      const shuffled = SUGG_POOL.slice().sort(() => Math.random() - 0.5);
+      activeSuggestions = shuffled.slice(0, 4);
+      return activeSuggestions;
+    }
+
+    function renderSuggestionCards(items) {
+      return items.map((it, i) => (
+        '<button class="suggestion-card" onclick="pickSuggestion(' + i + ')">' +
+          '<strong>' + escapeHtml(it.title) + '</strong>' +
+          '<span>' + escapeHtml(it.subtitle) + '</span>' +
+        '</button>'
+      )).join("");
+    }
+
+    function pickSuggestion(idx) {
+      const items = getCurrentSuggestions();
+      if (items[idx]) useSuggestion(items[idx].prompt);
+    }
+
+    async function refreshSmartSuggestions() {
+      const topics = state.chats.slice(0, 6).map(c => c.title).filter(Boolean);
+      const sig = topics.join("|");
+      if (!topics.length || sig === lastSuggSig) return;
+      lastSuggSig = sig;
+      try {
+        const res = await fetch("/api/suggestions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topics, apiKey: state.apiKey })
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.items && data.items.length) {
+          activeSuggestions = data.items;
+          const grid = document.getElementById("suggestionsGrid");
+          if (grid) grid.innerHTML = renderSuggestionCards(activeSuggestions);
+        }
+      } catch (_) {}
     }
 
     function useSuggestion(text) {
@@ -1430,6 +1486,10 @@ export default {
       return handleTTS(request, env);
     }
 
+    if (request.method === "POST" && url.pathname === "/api/suggestions") {
+      return handleSuggestions(request, env);
+    }
+
     if (request.method === "POST" && url.pathname === "/webhook") {
       return handleTelegramWebhook(request, env, url.origin);
     }
@@ -1539,6 +1599,37 @@ async function handleMiniAppChat(request, env) {
   }
 }
 
+
+
+async function handleSuggestions(request, env) {
+  try {
+    const { topics, apiKey } = await request.json();
+    const key = apiKey || env.AI_API_KEY;
+    if (!key || !topics || !topics.length) return Response.json({ items: [] });
+
+    const prompt = "Based on these recent user chat topics: " + topics.slice(0, 6).join(" | ") +
+      ". Generate 4 fresh, helpful, diverse next-question suggestion cards as a JSON array of objects with keys title (2-4 words), subtitle (3-5 words), and prompt (a full clear question). Return ONLY valid JSON array, no markdown.";
+
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+      body: JSON.stringify({
+        model: "openai/gpt-oss-20b",
+        max_tokens: 260,
+        temperature: 0.9,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    if (!res.ok) return Response.json({ items: [] });
+    const data = await res.json();
+    let txt = (data.choices?.[0]?.message?.content || "").trim();
+    txt = txt.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    const items = JSON.parse(txt);
+    return Response.json({ items: Array.isArray(items) ? items.slice(0, 4) : [] });
+  } catch (_) {
+    return Response.json({ items: [] });
+  }
+}
 
 async function handleTTS(request, env) {
   try {
