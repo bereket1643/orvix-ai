@@ -336,6 +336,25 @@ const HTML_PAGE = `<!DOCTYPE html>
     .about-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .about-links { display: flex; gap: 8px; flex-wrap: wrap; }
     .about-link { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); text-decoration: none; font-size: 12px; font-weight: 500; }
+
+    .sidebar, .model-menu, .modal {
+      background: rgba(20, 24, 32, 0.78) !important;
+      backdrop-filter: blur(22px) !important;
+      -webkit-backdrop-filter: blur(22px) !important;
+      border-color: var(--glass-border) !important;
+    }
+    html.light .sidebar, html.light .model-menu, html.light .modal {
+      background: rgba(255, 255, 255, 0.78) !important;
+    }
+    .seg-group { display: flex; gap: 8px; }
+    .seg-btn {
+      flex: 1; padding: 9px 12px; border-radius: 12px; font-size: 13px; font-weight: 600;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      color: var(--text-secondary); backdrop-filter: blur(12px); transition: all 0.15s;
+    }
+    .seg-btn.active {
+      background: var(--accent-btn); color: var(--accent-btn-text); border-color: transparent;
+    }
   </style>  </style>
 </head>
 <body>
@@ -444,6 +463,20 @@ const HTML_PAGE = `<!DOCTYPE html>
     </div>
   </div>
 
+  <div id="confirmModal" class="modal-backdrop" onclick="if(event.target===this) closeConfirm()">
+    <div class="modal" style="max-width:340px;">
+      <div class="modal-header">
+        <span id="confirmTitle">Delete Chat?</span>
+        <button class="icon-btn" onclick="closeConfirm()">✕</button>
+      </div>
+      <div id="confirmMsg" style="font-size:14px; color:var(--text-secondary); line-height:1.5;">Are you sure you want to delete this conversation?</div>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">
+        <button class="seg-btn" style="flex:0 0 auto; padding:9px 16px;" onclick="closeConfirm()">Cancel</button>
+        <button class="btn-danger" onclick="runConfirmAction()">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <div id="settingsModal" class="modal-backdrop" onclick="if(event.target===this) closeSettings()">
     <div class="modal">
       <div class="modal-header">
@@ -452,10 +485,10 @@ const HTML_PAGE = `<!DOCTYPE html>
       </div>
       <div>
         <label class="field-label">Theme</label>
-        <select id="themeSelect" class="field-select" onchange="applyTheme(this.value)">
-          <option value="dark">Dark (ChatGPT Default)</option>
-          <option value="light">Light</option>
-        </select>
+        <div class="seg-group">
+          <button type="button" id="themeDarkBtn" class="seg-btn" onclick="applyTheme('dark')">Dark (Orvix)</button>
+          <button type="button" id="themeLightBtn" class="seg-btn" onclick="applyTheme('light')">Light</button>
+        </div>
       </div>
       <div>
         <label class="field-label">Text Size (<span id="fontSizeVal">15</span>px)</label>
@@ -477,7 +510,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       </div>
       <div>
         <label class="field-label">Custom Instructions (System Prompt)</label>
-        <textarea id="customInstInput" class="field-textarea" placeholder="What would you like ChatGPT to know about you or how should it respond?"></textarea>
+        <textarea id="customInstInput" class="field-textarea" placeholder="What would you like Orvix AI to know about you or how should it respond?"></textarea>
       </div>
       <div>
         <label class="field-label">AI Provider Override (Optional — uses Bot default if blank)</label>
@@ -592,7 +625,10 @@ const HTML_PAGE = `<!DOCTYPE html>
       state.theme = t;
       localStorage.setItem("tg_gpt_theme", t);
       document.documentElement.classList.toggle("light", t === "light");
-      document.getElementById("themeSelect").value = t;
+      const db = document.getElementById("themeDarkBtn");
+      const lb = document.getElementById("themeLightBtn");
+      if (db) db.classList.toggle("active", t !== "light");
+      if (lb) lb.classList.toggle("active", t === "light");
     }
 
     function toggleSidebar(force) {
@@ -695,13 +731,31 @@ const HTML_PAGE = `<!DOCTYPE html>
       renderChat();
     }
 
+    let pendingConfirmFn = null;
+    function openConfirm(title, msg, fn) {
+      pendingConfirmFn = fn;
+      document.getElementById("confirmTitle").textContent = title;
+      document.getElementById("confirmMsg").textContent = msg;
+      document.getElementById("confirmModal").classList.add("open");
+    }
+    function closeConfirm() {
+      pendingConfirmFn = null;
+      document.getElementById("confirmModal").classList.remove("open");
+    }
+    function runConfirmAction() {
+      const fn = pendingConfirmFn;
+      closeConfirm();
+      if (fn) fn();
+    }
     function deleteChat(e, id) {
       e.stopPropagation();
-      state.chats = state.chats.filter(c => c.id !== id);
-      if (state.activeChatId === id) state.activeChatId = null;
-      saveChats();
-      renderSidebar();
-      renderChat();
+      openConfirm("Delete Chat?", "Are you sure you want to delete this chat from your history?", () => {
+        state.chats = state.chats.filter(c => c.id !== id);
+        if (state.activeChatId === id) state.activeChatId = null;
+        saveChats();
+        renderSidebar();
+        renderChat();
+      });
     }
 
     function renderMarkdown(text) {
@@ -1057,13 +1111,14 @@ const HTML_PAGE = `<!DOCTYPE html>
       closeSettings();
     }
     function clearAllChats() {
-      if (!confirm("Delete all saved chats?")) return;
-      state.chats = [];
-      state.activeChatId = null;
-      saveChats();
-      renderSidebar();
-      renderChat();
-      closeSettings();
+      openConfirm("Clear All Chats?", "Are you sure you want to delete all saved conversations?", () => {
+        state.chats = [];
+        state.activeChatId = null;
+        saveChats();
+        renderSidebar();
+        renderChat();
+        closeSettings();
+      });
     }
 
     function escapeHtml(s) {
