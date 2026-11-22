@@ -490,7 +490,12 @@ const HTML_PAGE = `<!DOCTYPE html>
   <div id="voiceOverlay" class="voice-overlay">
     <div class="voice-top">
       <span id="voiceStatusBadge" class="voice-status-badge">Voice Conversation</span>
-      <button class="icon-btn" onclick="closeVoiceMode()" title="Close">✕</button>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <button type="button" id="vPickFemale" class="voice-status-badge" style="cursor:pointer;" onclick="setVoicePreset('female')">👩 Female</button>
+        <button type="button" id="vPickMale" class="voice-status-badge" style="cursor:pointer;" onclick="setVoicePreset('male')">👨 Male</button>
+        <button type="button" id="vPickKids" class="voice-status-badge" style="cursor:pointer;" onclick="setVoicePreset('kids')">🧒 Kids</button>
+        <button class="icon-btn" onclick="closeVoiceMode()" title="Close">✕</button>
+      </div>
     </div>
     <div class="voice-center">
       <div id="voiceOrb" class="voice-orb listening" onclick="onOrbTap()"></div>
@@ -1233,6 +1238,21 @@ const HTML_PAGE = `<!DOCTYPE html>
 
 
     // --- Continuous Voice Conversation Mode ---
+    let voicePreset = localStorage.getItem("tg_gpt_voice_preset") || "female";
+    function getVoiceConfig() {
+      if (voicePreset === "male") return { voice: "troy", rate: 1.15 };
+      if (voicePreset === "kids") return { voice: "autumn", rate: 1.32 };
+      return { voice: "hannah", rate: 1.15 };
+    }
+    function setVoicePreset(p) {
+      voicePreset = p;
+      localStorage.setItem("tg_gpt_voice_preset", p);
+      ["Female", "Male", "Kids"].forEach(k => {
+        const b = document.getElementById("vPick" + k);
+        if (b) b.style.background = (p === k.toLowerCase()) ? "rgba(56,189,248,0.35)" : "rgba(255,255,255,0.08)";
+      });
+    }
+
     let voiceActive = false;
     let voiceMuted = false;
     let voiceBusy = false;
@@ -1263,7 +1283,8 @@ const HTML_PAGE = `<!DOCTYPE html>
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) {
         voiceActive = true;
-        document.getElementById("voiceOverlay").classList.add("open");
+        setVoicePreset(voicePreset);
+      document.getElementById("voiceOverlay").classList.add("open");
         setVoiceUI("listening", "Your Telegram WebView does not support auto-mic. Use your keyboard mic below or open in Chrome.");
         return;
       }
@@ -1347,7 +1368,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             if (spoken && !voiceBusy && voiceActive && !voiceMuted) {
               processVoiceQuery(spoken);
             }
-          }, 180);
+          }, 120);
         }
       };
 
@@ -1371,32 +1392,47 @@ const HTML_PAGE = `<!DOCTYPE html>
     async function processVoiceQuery(spokenText) {
       voiceBusy = true;
       setVoiceUI("thinking", spokenText);
-      await sendMessage(spokenText, true);
-      if (!voiceActive) return;
+      if (!state.tempMode && !state.activeChatId) {
+        const id = "c_" + Date.now();
+        state.chats.unshift({ id, title: spokenText.slice(0, 40), createdAt: Date.now(), updatedAt: Date.now(), messages: [] });
+        state.activeChatId = id;
+      }
       const msgs = getActiveMessages();
-      const last = msgs[msgs.length - 1];
-      const replyText = (last && last.role === "assistant" && last.content) ? last.content : "";
-      if (!replyText) { startVoiceTurn(); return; }
+      msgs.push({ role: "user", content: spokenText, display: spokenText });
+      const cfg = getVoiceConfig();
 
-      const cleanSpeech = replyText.replace(new RegExp("\\x60\\x60\\x60[\\s\\S]*?\\x60\\x60\\x60", "g"), "Code block omitted.").replace(/[*_#\x60>]/g, "");
-      setVoiceUI("speaking", replyText.slice(0, 260) + (replyText.length > 260 ? "..." : ""));
-      let played = false;
-      window._lastVoiceAudioUrl = null;
       try {
-        const ttsRes = await fetch("/api/tts", {
+        const res = await fetch("/api/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: cleanSpeech.slice(0, 190), apiKey: state.apiKey })
+          body: JSON.stringify({
+            messages: msgs.map(m => ({ role: m.role, content: m.content })),
+            apiKey: state.apiKey,
+            systemPrompt: state.customInst,
+            voice: cfg.voice
+          })
         });
-        if (ttsRes.ok) {
-          const buf = await ttsRes.arrayBuffer();
+        const data = await res.json();
+        const replyText = data.reply || data.error || "Sorry, try again.";
+        msgs.push({ role: "assistant", content: replyText });
+        if (!state.tempMode) saveChats();
+        renderSidebar();
+        renderChat();
+        if (!voiceActive) return;
+
+        setVoiceUI("speaking", replyText);
+        let played = false;
+        if (data.audioBase64) {
+          const bin = atob(data.audioBase64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
           if (vCtx) {
             try {
               if (vCtx.state === "suspended") await vCtx.resume();
-              const audioBuf = await vCtx.decodeAudioData(buf.slice(0));
+              const audioBuf = await vCtx.decodeAudioData(bytes.buffer.slice(0));
               const srcNode = vCtx.createBufferSource();
               srcNode.buffer = audioBuf;
-              srcNode.playbackRate.value = 1.12;
+              srcNode.playbackRate.value = cfg.rate;
               srcNode.connect(vCtx.destination);
               srcNode.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
               srcNode.start(0);
@@ -1404,41 +1440,25 @@ const HTML_PAGE = `<!DOCTYPE html>
             } catch (_) {}
           }
           if (!played) {
-            const blob = new Blob([buf], { type: ttsRes.headers.get("Content-Type") || "audio/wav" });
-            const dataUrl = await new Promise((resolve) => {
-              const fr = new FileReader();
-              fr.onloadend = () => resolve(fr.result);
-              fr.readAsDataURL(blob);
-            });
-            window._lastVoiceAudioUrl = dataUrl;
-            voiceAudio.src = dataUrl;
-            voiceAudio.playbackRate = 1.12;
+            const url = "data:" + (data.mime || "audio/wav") + ";base64," + data.audioBase64;
+            voiceAudio.src = url;
+            voiceAudio.playbackRate = cfg.rate;
             voiceAudio.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             voiceAudio.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             await voiceAudio.play();
             played = true;
           }
-        } else {
-          const errTxt = await ttsRes.text();
-          document.getElementById("voiceStatusBadge").textContent = "Voice Err: " + errTxt.slice(0, 60);
         }
-      } catch (e) {
-        document.getElementById("voiceStatusBadge").textContent = "Audio Err: " + (e.message || "blocked").slice(0, 50);
-      }
-      if (!played) {
-        if ("speechSynthesis" in window) {
-          window.speechSynthesis.cancel();
-          const utter = new SpeechSynthesisUtterance(cleanSpeech);
-          utter.onend = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
-          utter.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
-          window.speechSynthesis.speak(utter);
-        } else {
-          setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 2500);
+        if (!played) {
+          setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 1800);
         }
+      } catch (err) {
+        setVoiceUI("listening", "Connection error. Tap the orb to retry.");
+        voiceBusy = false;
       }
     }
 
-    init();
+        init();
   </script>
 </body>
 </html>`;
@@ -1484,6 +1504,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/tts") {
       return handleTTS(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/voice") {
+      return handleFastVoice(request, env);
     }
 
     if (request.method === "POST" && url.pathname === "/api/suggestions") {
@@ -1628,6 +1652,57 @@ async function handleSuggestions(request, env) {
     return Response.json({ items: Array.isArray(items) ? items.slice(0, 4) : [] });
   } catch (_) {
     return Response.json({ items: [] });
+  }
+}
+
+
+async function handleFastVoice(request, env) {
+  try {
+    const body = await request.json();
+    const key = body.apiKey || env.AI_API_KEY;
+    if (!key) return Response.json({ error: "Missing AI_API_KEY" }, { status: 400 });
+
+    const sys = (body.systemPrompt || "You are Orvix AI, created by Bereket Tesfaye (Grade 11B, @orvix16, 0960934894).") +
+      " Speak like a warm, natural human friend on a live call. Reply in 1 very short spoken sentence (under 22 words), no markdown.";
+    const msgs = [{ role: "system", content: sys }, ...(body.messages || []).slice(-6).map(m => ({ role: m.role, content: m.content }))];
+
+    const llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+      body: JSON.stringify({ model: "openai/gpt-oss-20b", messages: msgs, max_tokens: 60, temperature: 0.65 })
+    });
+    if (!llmRes.ok) return Response.json({ error: await llmRes.text() }, { status: llmRes.status });
+    const llmData = await llmRes.json();
+    const reply = (llmData.choices?.[0]?.message?.content || "").trim();
+    const clean = reply.replace(/\*{1,3}/g, "").replace(/[\x60#]/g, "").replace(/\s+/g, " ").slice(0, 190).trim();
+
+    let audioBase64 = "";
+    let mime = "audio/wav";
+    if (clean) {
+      try {
+        const ttsRes = await fetch("https://api.groq.com/openai/v1/audio/speech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+          body: JSON.stringify({
+            model: "canopylabs/orpheus-v1-english",
+            voice: body.voice || "hannah",
+            input: clean,
+            response_format: "wav"
+          })
+        });
+        if (ttsRes.ok) {
+          const buf = new Uint8Array(await ttsRes.arrayBuffer());
+          let bin = "";
+          for (let i = 0; i < buf.length; i += 8192) {
+            bin += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
+          }
+          audioBase64 = btoa(bin);
+        }
+      } catch (_) {}
+    }
+    return Response.json({ reply, audioBase64, mime });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }
 
