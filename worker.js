@@ -1718,7 +1718,7 @@ async function getStatsText(env) {
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data"
+  "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, Authorization"
 };
 
 function withCors(res) {
@@ -1794,6 +1794,16 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/voice") {
       return withCors(await handleFastVoice(request, env));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/signup") {
+      return withCors(await handleAuthSignup(request, env));
+    }
+    if (request.method === "POST" && url.pathname === "/api/auth/login") {
+      return withCors(await handleAuthLogin(request, env));
+    }
+    if (request.method === "GET" && url.pathname === "/api/auth/me") {
+      return withCors(await handleAuthMe(request, env));
     }
 
     if (request.method === "POST" && url.pathname === "/api/suggestions") {
@@ -1935,6 +1945,102 @@ async function handleMiniAppChat(request, env) {
 }
 
 
+
+
+async function hashPassword(password, salt) {
+  const enc = new TextEncoder();
+  const data = enc.encode(salt + ":" + password);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function signWebToken(email, secret) {
+  const exp = Date.now() + 30 * 86400000;
+  const payload = btoa(JSON.stringify({ email, exp }));
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret || "orvix-secret-key"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payload));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return payload + "." + sigHex;
+}
+
+async function verifyWebToken(token, secret) {
+  try {
+    const [payload, sigHex] = String(token || "").split(".");
+    if (!payload || !sigHex) return null;
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", enc.encode(secret || "orvix-secret-key"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payload));
+    const expected = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+    if (sigHex !== expected) return null;
+    const data = JSON.parse(atob(payload));
+    if (!data.email || Date.now() > data.exp) return null;
+    return data.email;
+  } catch (_) { return null; }
+}
+
+async function handleAuthSignup(request, env) {
+  try {
+    if (!env.USERS_KV) return Response.json({ error: "Server storage (USERS_KV) not bound." }, { status: 500 });
+    const { name, email, password } = await request.json();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const cleanName = String(name || "").trim();
+    const pass = String(password || "");
+    if (!cleanName || cleanName.length < 2) return Response.json({ error: "Please enter your full name." }, { status: 400 });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return Response.json({ error: "Please enter a valid email address." }, { status: 400 });
+    if (pass.length < 6) return Response.json({ error: "Password must be at least 6 characters." }, { status: 400 });
+
+    const key = "auth:" + cleanEmail;
+    const exists = await env.USERS_KV.get(key);
+    if (exists) return Response.json({ error: "An account with this email already exists. Please log in." }, { status: 409 });
+
+    const salt = crypto.randomUUID();
+    const hash = await hashPassword(pass, salt);
+    await env.USERS_KV.put(key, JSON.stringify({ name: cleanName, email: cleanEmail, salt, hash, createdAt: new Date().toISOString() }));
+    await trackUsage(env, "web:" + cleanEmail, cleanEmail, cleanName, false);
+
+    const token = await signWebToken(cleanEmail, env.BOT_TOKEN);
+    return Response.json({ token, user: { name: cleanName, email: cleanEmail } });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
+async function handleAuthLogin(request, env) {
+  try {
+    if (!env.USERS_KV) return Response.json({ error: "Server storage (USERS_KV) not bound." }, { status: 500 });
+    const { email, password } = await request.json();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const pass = String(password || "");
+    const raw = await env.USERS_KV.get("auth:" + cleanEmail);
+    if (!raw) return Response.json({ error: "Invalid email or password." }, { status: 401 });
+
+    const user = JSON.parse(raw);
+    const hash = await hashPassword(pass, user.salt);
+    if (hash !== user.hash) return Response.json({ error: "Invalid email or password." }, { status: 401 });
+
+    await trackUsage(env, "web:" + cleanEmail, cleanEmail, user.name, false);
+    const token = await signWebToken(cleanEmail, env.BOT_TOKEN);
+    return Response.json({ token, user: { name: user.name, email: user.email } });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
+async function handleAuthMe(request, env) {
+  try {
+    const auth = request.headers.get("Authorization") || "";
+    const token = auth.replace(/^Bearer\s+/i, "").trim();
+    const email = await verifyWebToken(token, env.BOT_TOKEN);
+    if (!email || !env.USERS_KV) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const raw = await env.USERS_KV.get("auth:" + email);
+    if (!raw) return Response.json({ error: "User not found" }, { status: 404 });
+    const u = JSON.parse(raw);
+    return Response.json({ user: { name: u.name, email: u.email } });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
 
 async function handleSuggestions(request, env) {
   try {
