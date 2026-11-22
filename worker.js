@@ -1285,9 +1285,9 @@ const HTML_PAGE = `<!DOCTYPE html>
     // --- Continuous Voice Conversation Mode ---
     let voicePreset = localStorage.getItem("tg_gpt_voice_preset") || "female";
     function getVoiceConfig() {
-      if (voicePreset === "male") return { voice: "troy", rate: 1.15 };
-      if (voicePreset === "kids") return { voice: "autumn", rate: 1.32 };
-      return { voice: "hannah", rate: 1.15 };
+      if (voicePreset === "male") return { voice: "troy", rate: 1.03 };
+      if (voicePreset === "kids") return { voice: "autumn", rate: 1.18 };
+      return { voice: "hannah", rate: 1.03 };
     }
     function setVoicePreset(p) {
       voicePreset = p;
@@ -1301,6 +1301,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     let voiceActive = false;
     let voiceMuted = false;
     let voiceBusy = false;
+    let voiceIgnoreUntil = 0;
     let voiceRec = null;
     let voiceTimer = null;
     const voiceAudio = new Audio();
@@ -1417,7 +1418,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       let bufferText = "";
 
       voiceRec.onresult = (e) => {
-        if (!voiceActive || voiceMuted || voiceBusy) return;
+        if (!voiceActive || voiceMuted || voiceBusy || Date.now() < voiceIgnoreUntil) return;
         let interim = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
           if (e.results[i].isFinal) bufferText += " " + e.results[i][0].transcript;
@@ -1433,7 +1434,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             if (spoken && !voiceBusy && voiceActive && !voiceMuted) {
               processVoiceQuery(spoken);
             }
-          }, 120);
+          }, 600);
         }
       };
 
@@ -1499,7 +1500,7 @@ const HTML_PAGE = `<!DOCTYPE html>
               srcNode.buffer = audioBuf;
               srcNode.playbackRate.value = cfg.rate;
               srcNode.connect(vCtx.destination);
-              srcNode.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+              srcNode.onended = () => { voiceIgnoreUntil = Date.now() + 900; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 650); };
               srcNode.start(0);
               played = true;
             } catch (_) {}
@@ -1508,7 +1509,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             const url = "data:" + (data.mime || "audio/wav") + ";base64," + data.audioBase64;
             voiceAudio.src = url;
             voiceAudio.playbackRate = cfg.rate;
-            voiceAudio.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+            voiceAudio.onended = () => { voiceIgnoreUntil = Date.now() + 900; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 650); };
             voiceAudio.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             await voiceAudio.play();
             played = true;
@@ -1522,7 +1523,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             window.speechSynthesis.cancel();
             const utter = new SpeechSynthesisUtterance(replyText);
             utter.rate = cfg.rate;
-            utter.onend = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+            utter.onend = () => { voiceIgnoreUntil = Date.now() + 900; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 650); };
             utter.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             window.speechSynthesis.speak(utter);
           } else {
@@ -1642,7 +1643,7 @@ async function handleMiniAppChat(request, env) {
       ? " Provide a thorough, well-structured Deep Research analysis with clear sections, key insights, and practical takeaways."
       : "";
     const voiceNote = body.fastVoice ? " Speak like a warm, natural human friend in a live voice call—reply in 1 short, expressive sentence with no markdown or lists." : deepNote;
-    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
+    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11, Class B student—never invent his school name, age, or any unstated facts—and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
     const rawMsgs = body.messages || [];
     const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
     const messages = [{ role: "system", content: systemPrompt }, ...rawMsgs.map(m => {
@@ -1739,7 +1740,7 @@ async function handleFastVoice(request, env) {
     const key = body.apiKey || env.AI_API_KEY;
     if (!key) return Response.json({ error: "Missing AI_API_KEY" }, { status: 400 });
 
-    const sys = (body.systemPrompt || "You are Orvix AI, created by Bereket Tesfaye (Grade 11B, @orvix16, 0960934894).") +
+    const sys = (body.systemPrompt || "You are Orvix AI, created by Bereket Tesfaye, a Grade 11 Class B student. Never invent any extra details about him; if asked who created you, say Bereket Tesfaye (Grade 11, Class B) and share Telegram @orvix16 or phone 0960934894.") +
       " Speak like a warm, natural human friend on a live call. Reply in 1 very short spoken sentence (under 22 words), no markdown.";
     const msgs = [{ role: "system", content: sys }, ...(body.messages || []).slice(-6).map(m => ({ role: m.role, content: m.content }))];
 
@@ -1997,7 +1998,7 @@ async function handleTelegramWebhook(request, env, origin) {
 }
 
 async function askBotAI(env, history) {
-  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
+  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11, Class B student—never invent his school name, age, or any unstated facts—and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
   history = [sysMsg, ...history];
   if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
