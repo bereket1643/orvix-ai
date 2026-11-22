@@ -391,9 +391,9 @@ const HTML_PAGE = `<!DOCTYPE html>
     if (tg) { tg.ready(); tg.expand(); }
 
     const MODELS = [
-      { id: "llama-3.3-70b-versatile", label: "ChatGPT 4o", desc: "Great for most tasks (Llama 3.3 70B)", provider: "groq" },
-      { id: "llama-3.1-8b-instant", label: "ChatGPT 4o-mini", desc: "Fastest for everyday answers", provider: "groq" },
-      { id: "deepseek-r1-distill-llama-70b", label: "ChatGPT o1-mini", desc: "Advanced reasoning & coding", provider: "groq" },
+      { id: "openai/gpt-oss-120b", label: "ChatGPT 4o", desc: "Great for most tasks (GPT OSS 120B)", provider: "groq" },
+      { id: "openai/gpt-oss-20b", label: "ChatGPT 4o-mini", desc: "Fastest for everyday answers", provider: "groq" },
+      { id: "qwen/qwen3.6-27b", label: "ChatGPT o1-mini", desc: "Advanced reasoning & coding", provider: "groq" },
       { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", desc: "Multimodal & fast (if Gemini key set)", provider: "gemini" },
       { id: "deepseek/deepseek-chat-v3-0324:free", label: "DeepSeek V3 (Free)", desc: "Via OpenRouter free tier", provider: "openrouter" }
     ];
@@ -951,7 +951,10 @@ async function handleMiniAppChat(request, env) {
 
     const systemPrompt = body.systemPrompt || "You are ChatGPT, a helpful, concise, and accurate AI assistant.";
     const messages = [{ role: "system", content: systemPrompt }, ...(body.messages || [])];
-    const model = body.model || env.DEFAULT_MODEL || "llama-3.3-70b-versatile";
+    let model = (body.model || env.DEFAULT_MODEL || "openai/gpt-oss-120b").trim();
+    if (!body.apiKey && provider === "groq" && (model.includes("gemini") || model.includes("deepseek/"))) {
+      model = (env.DEFAULT_MODEL || "openai/gpt-oss-120b").trim();
+    }
 
     if (provider === "gemini") {
       return streamGemini(apiKey, model.includes("gemini") ? model : "gemini-2.5-flash", messages);
@@ -1100,7 +1103,7 @@ async function handleTelegramWebhook(request, env, origin) {
 async function askBotAI(env, history) {
   if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
-  const model = env.DEFAULT_MODEL || (provider === "gemini" ? "gemini-2.5-flash" : "llama-3.3-70b-versatile");
+  const model = (env.DEFAULT_MODEL || (provider === "gemini" ? "gemini-2.5-flash" : "openai/gpt-oss-120b")).trim();
 
   if (provider === "gemini") {
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + env.AI_API_KEY;
