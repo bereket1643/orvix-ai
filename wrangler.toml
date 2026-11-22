@@ -1,0 +1,10 @@
+name = "telegram-chatgpt-miniapp"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+AI_PROVIDER = "groq"
+DEFAULT_MODEL = "llama-3.3-70b-versatile"
+# Set secrets in Cloudflare Dashboard (Settings -> Variables and Secrets):
+# BOT_TOKEN = "your-telegram-bot-token"
+# AI_API_KEY = "your-free-groq-or-gemini-or-openrouter-key"
