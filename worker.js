@@ -1049,7 +1049,9 @@ const HTML_PAGE = `<!DOCTYPE html>
     // --- Continuous Voice Conversation Mode ---
     let voiceActive = false;
     let voiceMuted = false;
+    let voiceBusy = false;
     let voiceRec = null;
+    let voiceTimer = null;
     const voiceAudio = new Audio();
     let vCtx = null;
 
@@ -1088,6 +1090,8 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     function closeVoiceMode() {
       voiceActive = false;
+      voiceBusy = false;
+      clearTimeout(voiceTimer);
       if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
       try { voiceAudio.pause(); voiceAudio.currentTime = 0; } catch (_) {}
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -1128,50 +1132,58 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     function startVoiceTurn() {
       if (!voiceActive || voiceMuted) return;
+      voiceBusy = false;
+      setVoiceUI("listening", "Listening... Speak now");
+      if (voiceRec) return;
+
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) return;
-      if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
       voiceRec = new SR();
       voiceRec.lang = "en-US";
+      voiceRec.continuous = true;
       voiceRec.interimResults = true;
-      let finalTranscript = "";
-      let hadError = false;
-      setVoiceUI("listening", "Listening... Speak now (or tap orb when done)");
+      let bufferText = "";
 
       voiceRec.onresult = (e) => {
+        if (!voiceActive || voiceMuted || voiceBusy) return;
         let interim = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+          if (e.results[i].isFinal) bufferText += " " + e.results[i][0].transcript;
           else interim += e.results[i][0].transcript;
         }
-        document.getElementById("voiceCaption").textContent = finalTranscript || interim || "Listening...";
+        const preview = (bufferText + " " + interim).trim();
+        if (preview) document.getElementById("voiceCaption").textContent = preview;
+        clearTimeout(voiceTimer);
+        if (bufferText.trim()) {
+          voiceTimer = setTimeout(() => {
+            const spoken = bufferText.trim();
+            bufferText = "";
+            if (spoken && !voiceBusy && voiceActive && !voiceMuted) {
+              processVoiceQuery(spoken);
+            }
+          }, 1000);
+        }
       };
 
       voiceRec.onerror = (e) => {
-        hadError = true;
         if (!voiceActive || voiceMuted) return;
-        if (e.error === "no-speech") {
-          setVoiceUI("listening", "Did not hear anything. Tap the orb or mic to speak again.");
-        } else {
-          setVoiceUI("listening", "Tap Allow for mic, then tap the orb to speak (or type below).");
+        if (e.error !== "no-speech") {
+          setVoiceUI("listening", "Tap Allow once, or tap the orb to speak.");
         }
       };
 
-      voiceRec.onend = async () => {
+      voiceRec.onend = () => {
         voiceRec = null;
-        if (!voiceActive || voiceMuted) return;
-        const spoken = finalTranscript.trim();
-        if (!spoken) {
-          if (!hadError) setVoiceUI("listening", "Tap the orb or mic button to speak.");
-          return;
+        if (voiceActive && !voiceMuted && !voiceBusy) {
+          setVoiceUI("listening", "Tap the orb to speak again.");
         }
-        await processVoiceQuery(spoken);
       };
 
-      try { voiceRec.start(); } catch (_) { hadError = true; }
+      try { voiceRec.start(); } catch (_) { voiceRec = null; }
     }
 
     async function processVoiceQuery(spokenText) {
+      voiceBusy = true;
       setVoiceUI("thinking", spokenText);
       await sendMessage(spokenText);
       if (!voiceActive) return;
