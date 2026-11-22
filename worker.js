@@ -7,6 +7,11 @@ const HTML_PAGE = `<!DOCTYPE html>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Orvix AI</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <meta name="theme-color" content="#070b12" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" />
@@ -483,6 +488,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         </div>
       </div>
       <div class="topbar-right">
+        <button id="installAppBtn" class="icon-btn" style="display:none; width:auto; padding:0 10px; font-size:12px; font-weight:600; background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.35);" onclick="installPWA()" title="Install Orvix AI App">📲 Install</button>
         <button id="tempChatBtn" class="icon-btn temp-badge" onclick="toggleTempChat()" title="Temporary Chat">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"><circle cx="12" cy="12" r="9"/></svg>
         </button>
@@ -648,6 +654,26 @@ const HTML_PAGE = `<!DOCTYPE html>
       isGenerating: false,
       abortCtrl: null
     };
+
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+    let deferredInstallPrompt = null;
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      const btn = document.getElementById("installAppBtn");
+      if (btn && !(tg && tg.initData)) btn.style.display = "flex";
+    });
+    async function installPWA() {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      const btn = document.getElementById("installAppBtn");
+      if (btn) btn.style.display = "none";
+    }
 
     function init() {
       if (!MODELS.some(x => x.id === state.model)) { state.model = MODELS[0].id; localStorage.setItem("tg_gpt_model", state.model); }
@@ -1715,6 +1741,28 @@ export default {
         } catch (_) {}
       }
       return new Response("Logo not found", { status: 404 });
+    }
+
+    if (request.method === "GET" && url.pathname === "/manifest.json") {
+      return Response.json({
+        name: "Orvix AI",
+        short_name: "Orvix AI",
+        description: "Fast, smart AI assistant with Live Voice Chat and Image Analysis.",
+        start_url: "/",
+        display: "standalone",
+        background_color: "#070b12",
+        theme_color: "#070b12",
+        icons: [
+          { src: "/logo.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+          { src: "/logo.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }
+        ]
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/sw.js") {
+      return new Response("self.addEventListener('fetch', () => {});", {
+        headers: { "Content-Type": "application/javascript; charset=utf-8" }
+      });
     }
 
     if (request.method === "GET" && url.pathname === "/health") {
