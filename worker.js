@@ -574,7 +574,11 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     function getLogoHtml(sz) {
       const custom = localStorage.getItem("tg_gpt_logo") || "https://raw.githubusercontent.com/bereket1643/orvix-ai/main/logo.png";
-      return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI" onerror="this.outerHTML=\'<svg width=' + sz + ' height=' + sz + ' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'1.8\\\'><circle cx=\\\'12\\\' cy=\\\'12\\\' r=\\\'9\\\'/><path d=\\\'M8 12l3 3 5-5\\\'/></svg>\'"/>';
+      return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI" data-sz="' + sz + '" onerror="fallbackLogo(this)"/>';
+    }
+    function fallbackLogo(img) {
+      const sz = img.getAttribute("data-sz") || 28;
+      img.outerHTML = '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5"/></svg>';
     }
     function applyFontSize(val) {
       document.documentElement.style.setProperty("--chat-font-size", val + "px");
