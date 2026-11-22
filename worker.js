@@ -449,6 +449,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       <button id="voiceMuteBtn" class="voice-ctrl-btn" onclick="toggleVoiceMute()" title="Mute/Unmute">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
       </button>
+      <button class="voice-ctrl-btn" onclick="if(window._lastVoiceAudioUrl){voiceAudio.src=window._lastVoiceAudioUrl;voiceAudio.play().catch(()=>{});}" title="Replay Voice">🔊</button>
       <button class="voice-ctrl-btn end" onclick="closeVoiceMode()" title="End Voice Mode">✕</button>
     </div>
   </div>
@@ -1050,6 +1051,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     let voiceMuted = false;
     let voiceRec = null;
     const voiceAudio = new Audio();
+    let vCtx = null;
 
     function setVoiceUI(mode, caption) {
       const orb = document.getElementById("voiceOrb");
@@ -1061,7 +1063,12 @@ const HTML_PAGE = `<!DOCTYPE html>
     }
 
     function openVoiceMode() {
-      try { voiceAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; voiceAudio.play().catch(() => {}); } catch (_) {}
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) { if (!vCtx) vCtx = new AC(); if (vCtx.state === "suspended") vCtx.resume(); }
+        voiceAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+        voiceAudio.play().catch(() => {});
+      } catch (_) {}
       if ("speechSynthesis" in window) {
         try { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch (_) {}
       }
@@ -1176,28 +1183,48 @@ const HTML_PAGE = `<!DOCTYPE html>
       const cleanSpeech = replyText.replace(new RegExp("\\x60\\x60\\x60[\\s\\S]*?\\x60\\x60\\x60", "g"), "Code block omitted.").replace(/[*_#\x60>]/g, "");
       setVoiceUI("speaking", replyText.slice(0, 260) + (replyText.length > 260 ? "..." : ""));
       let played = false;
+      window._lastVoiceAudioUrl = null;
       try {
         const ttsRes = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: cleanSpeech.slice(0, 600), apiKey: state.apiKey })
+          body: JSON.stringify({ text: cleanSpeech.slice(0, 190), apiKey: state.apiKey })
         });
         if (ttsRes.ok) {
-          const blob = await ttsRes.blob();
-          const url = URL.createObjectURL(blob);
-          voiceAudio.src = url;
-          voiceAudio.onended = () => {
-            URL.revokeObjectURL(url);
-            if (voiceActive && !voiceMuted) startVoiceTurn();
-          };
-          voiceAudio.onerror = () => {
-            URL.revokeObjectURL(url);
-            if (voiceActive && !voiceMuted) startVoiceTurn();
-          };
-          await voiceAudio.play();
-          played = true;
+          const buf = await ttsRes.arrayBuffer();
+          if (vCtx) {
+            try {
+              if (vCtx.state === "suspended") await vCtx.resume();
+              const audioBuf = await vCtx.decodeAudioData(buf.slice(0));
+              const srcNode = vCtx.createBufferSource();
+              srcNode.buffer = audioBuf;
+              srcNode.connect(vCtx.destination);
+              srcNode.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+              srcNode.start(0);
+              played = true;
+            } catch (_) {}
+          }
+          if (!played) {
+            const blob = new Blob([buf], { type: ttsRes.headers.get("Content-Type") || "audio/wav" });
+            const dataUrl = await new Promise((resolve) => {
+              const fr = new FileReader();
+              fr.onloadend = () => resolve(fr.result);
+              fr.readAsDataURL(blob);
+            });
+            window._lastVoiceAudioUrl = dataUrl;
+            voiceAudio.src = dataUrl;
+            voiceAudio.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+            voiceAudio.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+            await voiceAudio.play();
+            played = true;
+          }
+        } else {
+          const errTxt = await ttsRes.text();
+          document.getElementById("voiceStatusBadge").textContent = "Voice Err: " + errTxt.slice(0, 60);
         }
-      } catch (_) {}
+      } catch (e) {
+        document.getElementById("voiceStatusBadge").textContent = "Audio Err: " + (e.message || "blocked").slice(0, 50);
+      }
       if (!played) {
         if ("speechSynthesis" in window) {
           window.speechSynthesis.cancel();
@@ -1348,29 +1375,48 @@ async function handleTTS(request, env) {
   try {
     const { text, apiKey, voice } = await request.json();
     const key = apiKey || env.AI_API_KEY;
-    if (!key) return new Response("Missing AI_API_KEY", { status: 400 });
-    const clean = String(text || "").slice(0, 800).trim();
+    const clean = String(text || "").replace(/\s+/g, " ").slice(0, 190).trim();
     if (!clean) return new Response("Empty text", { status: 400 });
 
-    const upstream = await fetch("https://api.groq.com/openai/v1/audio/speech", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + key
-      },
-      body: JSON.stringify({
-        model: "canopylabs/orpheus-v1-english",
-        voice: voice || "troy",
-        input: clean,
-        response_format: "wav"
-      })
-    });
-    if (!upstream.ok) {
-      return new Response(await upstream.text(), { status: upstream.status });
+    let groqErr = "";
+    // 1. Try Groq Orpheus TTS first (if key present)
+    if (key) {
+      try {
+        const upstream = await fetch("https://api.groq.com/openai/v1/audio/speech", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + key
+          },
+          body: JSON.stringify({
+            model: "canopylabs/orpheus-v1-english",
+            voice: voice || "troy",
+            input: clean,
+            response_format: "wav"
+          })
+        });
+        if (upstream.ok) {
+          return new Response(upstream.body, {
+            headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store" }
+          });
+        } else {
+          groqErr = "Groq " + upstream.status + ": " + (await upstream.text()).slice(0, 120);
+        }
+      } catch (e) { groqErr = e.message; }
     }
-    return new Response(upstream.body, {
-      headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store" }
+
+    // 2. Fallback to Google Translate TTS (no key or terms required)
+    const gtUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=" + encodeURIComponent(clean);
+    const gtRes = await fetch(gtUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" }
     });
+    if (gtRes.ok) {
+      return new Response(gtRes.body, {
+        headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" }
+      });
+    }
+
+    return new Response("TTS failed: " + (groqErr || "blocked"), { status: 502 });
   } catch (err) {
     return new Response("TTS error: " + err.message, { status: 500 });
   }
