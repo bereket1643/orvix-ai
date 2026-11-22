@@ -1746,6 +1746,13 @@ export default {
 };
 
 
+
+function isAmharicText(txt) {
+  if (!txt) return false;
+  if (/[\u1200-\u137F]/.test(txt)) return true;
+  return /\b(selam|endet|negn|new|alehu|eshi|ameseginalehu|amharic|amaregna|min|man|yet|silezih|adrglgn|nigerign|tena|yistilign|dehn|kefelgk)\b/i.test(txt);
+}
+
 function extractTgUser(initData) {
   try {
     const params = new URLSearchParams(initData || "");
@@ -1829,8 +1836,11 @@ async function handleMiniAppChat(request, env) {
       model = "qwen/qwen3.8-27b";
     }
 
-    if (provider === "gemini") {
-      return streamGemini(apiKey, model.includes("gemini") ? model : "gemini-2.5-flash", messages);
+    const lastUserTxt = rawMsgs.length ? String(rawMsgs[rawMsgs.length - 1].content || "") : "";
+    const useGeminiAm = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastUserTxt));
+    if (provider === "gemini" || useGeminiAm) {
+      const gKey = provider === "gemini" ? apiKey : env.GEMINI_API_KEY;
+      return streamGemini(gKey, model.includes("gemini") ? model : "gemini-2.5-flash", messages);
     }
 
     const endpoint = provider === "openrouter"
@@ -1909,21 +1919,41 @@ async function handleFastVoice(request, env) {
       " You are on a live voice call like a real, warm human friend. React naturally, listen carefully, keep replies super crisp (1 to 2 natural spoken sentences, under 25 words), never use markdown, lists, or robotic filler." + langHint;
     const msgs = [{ role: "system", content: sys }, ...(body.messages || []).slice(-6).map(m => ({ role: m.role, content: m.content }))];
 
-    let llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-      body: JSON.stringify({ model: "qwen/qwen3.8-27b", messages: msgs, max_tokens: 90, reasoning_effort: "none", temperature: 0.75 })
-    });
-    if (!llmRes.ok) {
-      llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const lastSpoken = msgs.length > 1 ? String(msgs[msgs.length - 1].content || "") : "";
+    const useGemVoice = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastSpoken));
+    let reply = "";
+    if (useGemVoice) {
+      const gUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + env.GEMINI_API_KEY;
+      const gRes = await fetch(gUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sys }] },
+          contents: msgs.slice(1).map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }))
+        })
+      });
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        reply = (gData.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+      }
+    }
+    if (!reply) {
+      let llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-        body: JSON.stringify({ model: "openai/gpt-oss-20b", messages: msgs, max_tokens: 300, reasoning_effort: "low", temperature: 0.75 })
+        body: JSON.stringify({ model: "qwen/qwen3.8-27b", messages: msgs, max_tokens: 90, reasoning_effort: "none", temperature: 0.75 })
       });
+      if (!llmRes.ok) {
+        llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+          body: JSON.stringify({ model: "openai/gpt-oss-20b", messages: msgs, max_tokens: 300, reasoning_effort: "low", temperature: 0.75 })
+        });
+      }
+      if (!llmRes.ok) return Response.json({ error: await llmRes.text() }, { status: llmRes.status });
+      const llmData = await llmRes.json();
+      reply = (llmData.choices?.[0]?.message?.content || "").trim();
     }
-    if (!llmRes.ok) return Response.json({ error: await llmRes.text() }, { status: llmRes.status });
-    const llmData = await llmRes.json();
-    const reply = (llmData.choices?.[0]?.message?.content || "").trim();
     const clean = reply.replace(/\*{1,3}/g, "").replace(/[\x60#]/g, "").replace(/\s+/g, " ").slice(0, 190).trim();
 
     let audioBase64 = "";
@@ -2158,6 +2188,46 @@ async function handleTelegramWebhook(request, env, origin) {
     return new Response("OK");
   }
 
+  if (text.startsWith("/broadcast")) {
+    const uname = (fromU.username || "").toLowerCase();
+    if (uname !== "orvix16") {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "This command is only available to the bot owner." });
+      return new Response("OK");
+    }
+    const announcement = text.replace(/^\/broadcast\s*/i, "").trim();
+    if (!announcement) {
+      await tgCall(env.BOT_TOKEN, "sendMessage", {
+        chat_id: chatId,
+        text: "Usage: /broadcast Your message here\n\nExample: /broadcast New update coming soon to Orvix AI!"
+      });
+      return new Response("OK");
+    }
+    if (!env.USERS_KV) {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "USERS_KV is not bound. Bind USERS_KV first." });
+      return new Response("OK");
+    }
+    const list = await env.USERS_KV.list({ prefix: "u:" });
+    let sent = 0;
+    let failed = 0;
+    for (const k of list.keys) {
+      const targetId = k.name.slice(2);
+      if (!/^\d+$/.test(targetId)) continue;
+      try {
+        const r = await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: targetId, text: announcement });
+        const j = await r.json();
+        if (j.ok) sent++;
+        else failed++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    await tgCall(env.BOT_TOKEN, "sendMessage", {
+      chat_id: chatId,
+      text: "Broadcast complete!\nSent: " + sent + "\nFailed/Blocked: " + failed
+    });
+    return new Response("OK");
+  }
+
   if (text === "/help") {
     await tgCall(env.BOT_TOKEN, "sendMessage", {
       chat_id: chatId,
@@ -2193,13 +2263,18 @@ async function askBotAI(env, history) {
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
   const model = (env.DEFAULT_MODEL || (provider === "gemini" ? "gemini-2.5-flash" : "openai/gpt-oss-120b")).trim();
 
-  if (provider === "gemini") {
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + env.AI_API_KEY;
+  const lastBotTxt = history.length ? String(history[history.length - 1].content || "") : "";
+  const useGemBot = provider === "gemini" || (!!env.GEMINI_API_KEY && isAmharicText(lastBotTxt));
+  if (useGemBot) {
+    const gKey = provider === "gemini" ? env.AI_API_KEY : env.GEMINI_API_KEY;
+    const gMod = model.includes("gemini") ? model : "gemini-2.5-flash";
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + gMod + ":generateContent?key=" + gKey;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: history.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }))
+        systemInstruction: { parts: [{ text: sysMsg.content }] },
+        contents: history.filter(m => m.role !== "system").map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }))
       })
     });
     const data = await res.json();
