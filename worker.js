@@ -825,7 +825,28 @@ const HTML_PAGE = `<!DOCTYPE html>
       Array.from(files).forEach(file => {
         const reader = new FileReader();
         if (file.type.startsWith("image/")) {
-          reader.onload = () => { state.attachments.push({ type: "image", name: file.name, data: reader.result }); renderAttachments(); updateSendBtn(); };
+          reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+              const maxDim = 1024;
+              let w = img.width, h = img.height;
+              if (w > maxDim || h > maxDim) {
+                if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                else { w = Math.round(w * maxDim / h); h = maxDim; }
+              }
+              const c = document.createElement("canvas");
+              c.width = w; c.height = h;
+              c.getContext("2d").drawImage(img, 0, 0, w, h);
+              const compressed = c.toDataURL("image/jpeg", 0.82);
+              state.attachments.push({ type: "image", name: file.name, data: compressed });
+              renderAttachments(); updateSendBtn();
+            };
+            img.onerror = () => {
+              state.attachments.push({ type: "image", name: file.name, data: reader.result });
+              renderAttachments(); updateSendBtn();
+            };
+            img.src = reader.result;
+          };
           reader.readAsDataURL(file);
         } else {
           reader.onload = () => { state.attachments.push({ type: "text", name: file.name, data: reader.result.slice(0, 12000) }); renderAttachments(); updateSendBtn(); };
@@ -1354,7 +1375,7 @@ async function handleMiniAppChat(request, env) {
       model = "openai/gpt-oss-20b";
     }
     if (hasImages && provider === "groq") {
-      model = "meta-llama/llama-4-scout-17b-16e-instruct";
+      model = "qwen/qwen3.8-27b";
     }
 
     if (provider === "gemini") {
