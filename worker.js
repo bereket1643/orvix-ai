@@ -593,15 +593,10 @@ const HTML_PAGE = `<!DOCTYPE html>
 
 
     function getLogoHtml(sz) {
-      const custom = "https://raw.githubusercontent.com/bereket1643/orvix-ai/main/logo.png";
+      const custom = "/logo.png";
       return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI" data-sz="' + sz + '" onerror="fallbackLogo(this)"/>';
     }
     function fallbackLogo(img) {
-      if (!img.dataset.triedJpg) {
-        img.dataset.triedJpg = "1";
-        img.src = "https://raw.githubusercontent.com/bereket1643/orvix-ai/main/logo.jpg";
-        return;
-      }
       const sz = img.getAttribute("data-sz") || 28;
       img.outerHTML = '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5"/></svg>';
     }
@@ -1343,6 +1338,24 @@ export default {
       });
     }
 
+    if (request.method === "GET" && url.pathname === "/logo.png") {
+      const candidates = ["logo.png", "logo.jpg", "Logo.png", "Logo.jpg", "logo.jpeg", "logo.webp"];
+      for (const name of candidates) {
+        try {
+          const r = await fetch("https://raw.githubusercontent.com/bereket1643/orvix-ai/main/" + name);
+          if (r.ok) {
+            return new Response(r.body, {
+              headers: {
+                "Content-Type": r.headers.get("Content-Type") || "image/png",
+                "Cache-Control": "public, max-age=300"
+              }
+            });
+          }
+        } catch (_) {}
+      }
+      return new Response("Logo not found", { status: 404 });
+    }
+
     if (request.method === "GET" && url.pathname === "/health") {
       return Response.json({ ok: true, provider: env.AI_PROVIDER || "groq" });
     }
@@ -1607,14 +1620,14 @@ async function handleTelegramWebhook(request, env, origin) {
   if (text === "/start") {
     await tgCall(env.BOT_TOKEN, "setChatMenuButton", {
       chat_id: chatId,
-      menu_button: { type: "web_app", text: "ChatGPT", web_app: { url: origin } }
+      menu_button: { type: "web_app", text: "Orvix AI", web_app: { url: origin } }
     });
     await tgCall(env.BOT_TOKEN, "sendMessage", {
       chat_id: chatId,
-      text: "Welcome to *ChatGPT Mini App*!\n\nTap the button below to launch the full ChatGPT interface, or just send me a message right here.",
+      text: "Welcome to *Orvix AI*!\n\nTap the button below to launch the full Orvix AI interface, or just send me a message right here.",
       parse_mode: "Markdown",
       reply_markup: {
-        inline_keyboard: [[{ text: "Open ChatGPT", web_app: { url: origin } }]]
+        inline_keyboard: [[{ text: "Open Orvix AI", web_app: { url: origin } }]]
       }
     });
     return new Response("OK");
