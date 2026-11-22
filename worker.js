@@ -368,6 +368,59 @@ const HTML_PAGE = `<!DOCTYPE html>
       box-shadow: 0 0 32px rgba(56, 189, 248, 0.42), 0 0 60px rgba(16, 163, 127, 0.24) !important;
       border-color: rgba(56, 189, 248, 0.65) !important;
     }
+
+    /* Pro Launch Splash Screen */
+    .splash-screen {
+      position: fixed; inset: 0; z-index: 120;
+      background: radial-gradient(circle at 50% 40%, #102536 0%, #0b0f14 70%, #07090d 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .splash-screen.hide { opacity: 0; transform: scale(1.04); pointer-events: none; }
+    .splash-ring {
+      width: 96px; height: 96px; border-radius: 50%; padding: 4px;
+      background: conic-gradient(from 0deg, #38bdf8, #10a37f, #818cf8, #38bdf8);
+      box-shadow: 0 0 50px rgba(56, 189, 248, 0.45);
+      animation: splashPop 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .splash-inner {
+      width: 100%; height: 100%; border-radius: 50%; overflow: hidden; background: #0b0f14;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .splash-inner img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+    .splash-title {
+      font-size: 24px; font-weight: 700; letter-spacing: 0.02em; color: #f8fafc;
+      opacity: 0; animation: splashFadeUp 0.55s 0.2s ease forwards;
+    }
+    .splash-bar {
+      width: 120px; height: 3px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden;
+      opacity: 0; animation: splashFadeUp 0.5s 0.3s ease forwards;
+    }
+    .splash-bar-fill {
+      width: 45%; height: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, #10a37f, #38bdf8);
+      animation: splashSlide 1.1s infinite ease-in-out;
+    }
+    @keyframes splashPop { 0% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
+    @keyframes splashFadeUp { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes splashSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+
+    .gpt-logo { width: 72px !important; height: 72px !important; flex-shrink: 0; border-radius: 50%; overflow: hidden; }
+    .gpt-logo img { width: 72px !important; height: 72px !important; object-fit: cover; border-radius: 50%; display: block; }
+    .analysing-pill { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border); font-size: 13px; font-weight: 500; color: var(--text-secondary); backdrop-filter: blur(12px); }
+    .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+    .user-meta { display: flex; flex-direction: column; min-width: 0; }
+    .user-handle { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .about-creator { padding: 10px 12px 12px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    .about-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .about-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .about-link { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); text-decoration: none; font-size: 12px; font-weight: 500; }
+    .sidebar, .model-menu, .modal { background: rgba(20, 24, 32, 0.78) !important; backdrop-filter: blur(22px) !important; -webkit-backdrop-filter: blur(22px) !important; border-color: var(--glass-border) !important; }
+    html.light .sidebar, html.light .model-menu, html.light .modal { background: rgba(255, 255, 255, 0.78) !important; }
+    .seg-group { display: flex; gap: 8px; }
+    .seg-btn { flex: 1; padding: 9px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-secondary); backdrop-filter: blur(12px); transition: all 0.15s; }
+    .seg-btn.active { background: var(--accent-btn); color: var(--accent-btn-text); border-color: transparent; }
   </style>  </style>  </style>  </style>
 </head>
 <body>
