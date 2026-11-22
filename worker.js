@@ -325,6 +325,17 @@ const HTML_PAGE = `<!DOCTYPE html>
     }
     .voice-ctrl-btn.end { background: #ef4444; color: #fff; border-color: transparent; }
     .voice-ctrl-btn.muted { background: rgba(239, 68, 68, 0.25); color: #fca5a5; }
+
+    .gpt-logo { width: 72px !important; height: 72px !important; flex-shrink: 0; border-radius: 50%; overflow: hidden; }
+    .gpt-logo img { width: 72px !important; height: 72px !important; object-fit: cover; border-radius: 50%; display: block; }
+    .analysing-pill { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border); font-size: 13px; font-weight: 500; color: var(--text-secondary); backdrop-filter: blur(12px); }
+    .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+    .user-meta { display: flex; flex-direction: column; min-width: 0; }
+    .user-handle { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .about-creator { padding: 10px 12px 12px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    .about-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .about-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .about-link { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); text-decoration: none; font-size: 12px; font-weight: 500; }
   </style>  </style>
 </head>
 <body>
@@ -540,7 +551,7 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     function getLogoHtml(sz) {
       const custom = "/logo.png";
-      return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI" data-sz="' + sz + '" onerror="fallbackLogo(this)"/>';
+      return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI" style="width:72px;height:72px;max-width:72px;max-height:72px;border-radius:50%;object-fit:cover;display:block;" data-sz="' + sz + '" onerror="fallbackLogo(this)"/>';
     }
     function fallbackLogo(img) {
       const sz = img.getAttribute("data-sz") || 28;
