@@ -1306,6 +1306,9 @@ const HTML_PAGE = `<!DOCTYPE html>
     let voiceTimer = null;
     const voiceAudio = new Audio();
     let vCtx = null;
+    let activeVoiceNode = null;
+    let isAISpeaking = false;
+    let speakStartedAt = 0;
 
 
     (function buildWaveBars() {
@@ -1361,13 +1364,19 @@ const HTML_PAGE = `<!DOCTYPE html>
       startVoiceTurn();
     }
 
+    function stopCurrentSpeech() {
+      isAISpeaking = false;
+      if (activeVoiceNode) { try { activeVoiceNode.onended = null; activeVoiceNode.stop(); } catch (_) {} activeVoiceNode = null; }
+      try { voiceAudio.onended = null; voiceAudio.pause(); voiceAudio.currentTime = 0; } catch (_) {}
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    }
+
     function closeVoiceMode() {
       voiceActive = false;
       voiceBusy = false;
       clearTimeout(voiceTimer);
       if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
-      try { voiceAudio.pause(); voiceAudio.currentTime = 0; } catch (_) {}
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      stopCurrentSpeech();
       if (state.abortCtrl) state.abortCtrl.abort();
       document.getElementById("voiceOverlay").classList.remove("open");
     }
@@ -1392,7 +1401,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       processVoiceQuery(txt);
     }
     function onOrbTap() {
-      if (!voiceAudio.paused) { voiceAudio.pause(); if (voiceActive && !voiceMuted) startVoiceTurn(); return; }
+      if (isAISpeaking || !voiceAudio.paused) { stopCurrentSpeech(); if (voiceActive && !voiceMuted) startVoiceTurn(); return; }
       if ("speechSynthesis" in window && window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
         if (voiceActive && !voiceMuted) startVoiceTurn();
@@ -1418,12 +1427,23 @@ const HTML_PAGE = `<!DOCTYPE html>
       let bufferText = "";
 
       voiceRec.onresult = (e) => {
-        if (!voiceActive || voiceMuted || voiceBusy || Date.now() < voiceIgnoreUntil) return;
+        if (!voiceActive || voiceMuted) return;
         let interim = "";
+        let newFinal = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) bufferText += " " + e.results[i][0].transcript;
+          if (e.results[i].isFinal) newFinal += " " + e.results[i][0].transcript;
           else interim += e.results[i][0].transcript;
         }
+        const heard = (newFinal + " " + interim).trim();
+        if (isAISpeaking && heard.length >= 4 && (Date.now() - speakStartedAt) > 750) {
+          stopCurrentSpeech();
+          isAISpeaking = false;
+          voiceBusy = false;
+          voiceIgnoreUntil = 0;
+          setVoiceUI("listening", heard);
+        }
+        if (voiceBusy || Date.now() < voiceIgnoreUntil) return;
+        if (newFinal) bufferText += newFinal;
         const preview = (bufferText + " " + interim).trim();
         if (preview) document.getElementById("voiceCaption").textContent = preview;
         clearTimeout(voiceTimer);
@@ -1434,7 +1454,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             if (spoken && !voiceBusy && voiceActive && !voiceMuted) {
               processVoiceQuery(spoken);
             }
-          }, 600);
+          }, 500);
         }
       };
 
@@ -1496,20 +1516,27 @@ const HTML_PAGE = `<!DOCTYPE html>
             try {
               if (vCtx.state === "suspended") await vCtx.resume();
               const audioBuf = await vCtx.decodeAudioData(bytes.buffer.slice(0));
+              stopCurrentSpeech();
               const srcNode = vCtx.createBufferSource();
+              activeVoiceNode = srcNode;
+              isAISpeaking = true;
+              speakStartedAt = Date.now();
               srcNode.buffer = audioBuf;
               srcNode.playbackRate.value = cfg.rate;
               srcNode.connect(vCtx.destination);
-              srcNode.onended = () => { voiceIgnoreUntil = Date.now() + 900; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 650); };
+              srcNode.onended = () => { isAISpeaking = false; activeVoiceNode = null; voiceIgnoreUntil = Date.now() + 550; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 350); };
               srcNode.start(0);
               played = true;
             } catch (_) {}
           }
           if (!played) {
             const url = "data:" + (data.mime || "audio/wav") + ";base64," + data.audioBase64;
+            stopCurrentSpeech();
+            isAISpeaking = true;
+            speakStartedAt = Date.now();
             voiceAudio.src = url;
             voiceAudio.playbackRate = cfg.rate;
-            voiceAudio.onended = () => { voiceIgnoreUntil = Date.now() + 900; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 650); };
+            voiceAudio.onended = () => { isAISpeaking = false; voiceIgnoreUntil = Date.now() + 550; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 350); };
             voiceAudio.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             await voiceAudio.play();
             played = true;
@@ -1741,14 +1768,21 @@ async function handleFastVoice(request, env) {
     if (!key) return Response.json({ error: "Missing AI_API_KEY" }, { status: 400 });
 
     const sys = (body.systemPrompt || "You are Orvix AI, created by Bereket Tesfaye, a Grade 11 Class B student. Never invent any extra details about him; if asked who created you, say Bereket Tesfaye (Grade 11, Class B) and share Telegram @orvix16 or phone 0960934894.") +
-      " Speak like a warm, natural human friend on a live call. Reply in 1 very short spoken sentence (under 22 words), no markdown.";
+      " You are on a live voice call like a real, warm human friend. React naturally, listen carefully, keep replies super crisp (1 to 2 natural spoken sentences, under 25 words), never use markdown, lists, or robotic filler.";
     const msgs = [{ role: "system", content: sys }, ...(body.messages || []).slice(-6).map(m => ({ role: m.role, content: m.content }))];
 
-    const llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    let llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-      body: JSON.stringify({ model: "openai/gpt-oss-20b", messages: msgs, max_tokens: 350, reasoning_effort: "low", temperature: 0.65 })
+      body: JSON.stringify({ model: "qwen/qwen3.8-27b", messages: msgs, max_tokens: 90, reasoning_effort: "none", temperature: 0.75 })
     });
+    if (!llmRes.ok) {
+      llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+        body: JSON.stringify({ model: "openai/gpt-oss-20b", messages: msgs, max_tokens: 300, reasoning_effort: "low", temperature: 0.75 })
+      });
+    }
     if (!llmRes.ok) return Response.json({ error: await llmRes.text() }, { status: llmRes.status });
     const llmData = await llmRes.json();
     const reply = (llmData.choices?.[0]?.message?.content || "").trim();
