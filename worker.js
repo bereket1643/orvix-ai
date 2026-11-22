@@ -392,6 +392,39 @@ const HTML_PAGE = `<!DOCTYPE html>
     @keyframes splashPop { 0% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
     @keyframes splashFadeUp { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
     @keyframes splashSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+
+    .composer-box {
+      box-shadow: 0 0 24px rgba(56, 189, 248, 0.22), 0 0 48px rgba(139, 92, 246, 0.14), 0 8px 30px rgba(0, 0, 0, 0.25) !important;
+      border: 1px solid rgba(125, 211, 252, 0.35) !important;
+      transition: box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+    .composer-box:focus-within {
+      box-shadow: 0 0 32px rgba(56, 189, 248, 0.42), 0 0 60px rgba(16, 163, 127, 0.24) !important;
+      border-color: rgba(56, 189, 248, 0.65) !important;
+    }
+    .wave-card {
+      width: 100%; max-width: 360px; padding: 16px 18px 14px; border-radius: 18px;
+      background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(16px); display: flex; flex-direction: column; gap: 14px;
+    }
+    .wave-bars {
+      height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 4px;
+    }
+    .wave-bar {
+      width: 4px; height: 6px; border-radius: 999px;
+      background: linear-gradient(180deg, #a855f7, #6366f1);
+      transition: height 0.12s ease, opacity 0.15s ease; opacity: 0.65;
+    }
+    .wave-bars.active .wave-bar {
+      opacity: 1; animation: waveDance 0.7s infinite ease-in-out alternate;
+    }
+    @keyframes waveDance { 0% { height: 6px; } 100% { height: 28px; } }
+    .wave-meta { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #cbd5e1; }
+    .wave-dot-wrap { display: flex; align-items: center; gap: 8px; }
+    .wave-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981; }
+    .mic-meter-wrap { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.08em; color: #94a3b8; }
+    .mic-meter-bg { width: 64px; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; }
+    .mic-meter-fill { width: 25%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #8b5cf6, #38bdf8); transition: width 0.15s ease; }
   </style>  </style>
 </head>
 <body>
@@ -500,6 +533,13 @@ const HTML_PAGE = `<!DOCTYPE html>
     <div class="voice-center">
       <div id="voiceOrb" class="voice-orb listening" onclick="onOrbTap()"></div>
       <div id="voiceCaption" class="voice-caption">Listening... Speak now</div>
+      <div class="wave-card">
+        <div id="waveBars" class="wave-bars active"></div>
+        <div class="wave-meta">
+          <div class="wave-dot-wrap"><span class="wave-dot"></span><span id="waveStateText">Listening for voice...</span></div>
+          <div class="mic-meter-wrap"><span>MIC LEVEL</span><div class="mic-meter-bg"><div id="micMeterFill" class="mic-meter-fill"></div></div></div>
+        </div>
+      </div>
     </div>
         <div id="voiceFallbackRow" class="voice-fallback-row">
       <input id="voiceFallbackInput" class="field-input" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.18);" type="text" placeholder="Type to Orvix..." onkeydown="if(event.key===\\'Enter\\') sendVoiceFallback()" />
@@ -1261,6 +1301,18 @@ const HTML_PAGE = `<!DOCTYPE html>
     const voiceAudio = new Audio();
     let vCtx = null;
 
+
+    (function buildWaveBars() {
+      const wb = document.getElementById("waveBars");
+      if (!wb) return;
+      let h = "";
+      for (let i = 0; i < 28; i++) {
+        const delay = ((i % 7) * 0.09).toFixed(2);
+        h += '<div class="wave-bar" style="animation-delay:' + delay + 's"></div>';
+      }
+      wb.innerHTML = h;
+    })();
+
     function setVoiceUI(mode, caption) {
       const orb = document.getElementById("voiceOrb");
       const badge = document.getElementById("voiceStatusBadge");
@@ -1268,6 +1320,12 @@ const HTML_PAGE = `<!DOCTYPE html>
       orb.className = "voice-orb " + mode;
       badge.textContent = mode === "listening" ? "Listening" : mode === "thinking" ? "Thinking..." : "Speaking (tap orb to interrupt)";
       if (caption !== undefined) cap.textContent = caption;
+      const wt = document.getElementById("waveStateText");
+      const wb = document.getElementById("waveBars");
+      const mf = document.getElementById("micMeterFill");
+      if (wt) wt.textContent = mode === "listening" ? "Listening for voice..." : mode === "thinking" ? "Thinking..." : "Speaking...";
+      if (wb) wb.classList.toggle("active", mode === "listening" || mode === "speaking");
+      if (mf) mf.style.width = mode === "speaking" ? "85%" : mode === "thinking" ? "45%" : "25%";
     }
 
     function openVoiceMode() {
@@ -1450,7 +1508,16 @@ const HTML_PAGE = `<!DOCTYPE html>
           }
         }
         if (!played) {
-          setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 1800);
+          if ("speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(replyText);
+            utter.rate = cfg.rate;
+            utter.onend = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+            utter.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+            window.speechSynthesis.speak(utter);
+          } else {
+            setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 1800);
+          }
         }
       } catch (err) {
         setVoiceUI("listening", "Connection error. Tap the orb to retry.");
@@ -1699,6 +1766,21 @@ async function handleFastVoice(request, env) {
           audioBase64 = btoa(bin);
         }
       } catch (_) {}
+      if (!audioBase64) {
+        try {
+          const gtUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=" + encodeURIComponent(clean);
+          const gtRes = await fetch(gtUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+          if (gtRes.ok) {
+            const buf = new Uint8Array(await gtRes.arrayBuffer());
+            let bin = "";
+            for (let i = 0; i < buf.length; i += 8192) {
+              bin += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
+            }
+            audioBase64 = btoa(bin);
+            mime = "audio/mpeg";
+          }
+        } catch (_) {}
+      }
     }
     return Response.json({ reply, audioBase64, mime });
   } catch (err) {
