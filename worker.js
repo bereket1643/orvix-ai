@@ -576,6 +576,13 @@ const HTML_PAGE = `<!DOCTYPE html>
         </div>
       </div>
       <div>
+        <label class="field-label">Language / ቋንቋ</label>
+        <div class="seg-group">
+          <button type="button" id="langEnBtn" class="seg-btn" onclick="applyLang('en')">English</button>
+          <button type="button" id="langAmBtn" class="seg-btn" onclick="applyLang('am')">አማርኛ</button>
+        </div>
+      </div>
+      <div>
         <label class="field-label">Text Size (<span id="fontSizeVal">15</span>px)</label>
         <input id="fontSizeRange" type="range" min="12" max="22" value="15" style="width:100%;" oninput="applyFontSize(this.value)" />
       </div>
@@ -646,6 +653,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (!MODELS.some(x => x.id === state.model)) { state.model = MODELS[0].id; localStorage.setItem("tg_gpt_model", state.model); }
       applyTheme(state.theme);
       applyDisplayPrefs();
+      applyLang(appLang);
       if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         const u = tg.initDataUnsafe.user;
         const full = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username || "User";
@@ -709,6 +717,45 @@ const HTML_PAGE = `<!DOCTYPE html>
       const brR = document.getElementById("brightnessRange");
       if (fsR) fsR.value = fs;
       if (brR) brR.value = br;
+    }
+
+
+    let appLang = localStorage.getItem("tg_gpt_lang") || "en";
+    const I18N = {
+      en: {
+        placeholder: "Message Orvix AI",
+        search: "Search chats...",
+        listening: "Listening...",
+        hint: "Speak naturally • Tap orb to interrupt",
+        disclaimer: "Orvix AI • Built by Bereket • Check important info.",
+        temp: "Temporary Chat",
+        emptyTitle: "Orvix AI"
+      },
+      am: {
+        placeholder: "ለ Orvix AI መልዕክት ይጻፉ...",
+        search: "ቻቶችን ይፈልጉ...",
+        listening: "እያዳመጠ ነው...",
+        hint: "በተፈጥሮ ይናገሩ • ለማስቆም ክቡን ይንኩ",
+        disclaimer: "Orvix AI • በበረከት የተሰራ • አስፈላጊ መረጃን ያረጋግጡ።",
+        temp: "ጊዜያዊ ቻት",
+        emptyTitle: "Orvix AI"
+      }
+    };
+
+    function applyLang(l) {
+      appLang = l === "am" ? "am" : "en";
+      localStorage.setItem("tg_gpt_lang", appLang);
+      const eb = document.getElementById("langEnBtn");
+      const ab = document.getElementById("langAmBtn");
+      if (eb) eb.classList.toggle("active", appLang === "en");
+      if (ab) ab.classList.toggle("active", appLang === "am");
+      const t = I18N[appLang];
+      const pi = document.getElementById("promptInput");
+      if (pi) pi.placeholder = t.placeholder;
+      const sc = document.getElementById("searchChats");
+      if (sc) sc.placeholder = t.search;
+      const dis = document.querySelector(".disclaimer");
+      if (dis) dis.textContent = t.disclaimer;
     }
 
     function applyTheme(t) {
@@ -1138,7 +1185,8 @@ const HTML_PAGE = `<!DOCTYPE html>
             provider,
             apiKey: state.apiKey,
             systemPrompt: state.customInst,
-            fastVoice: !!isVoiceMode
+            fastVoice: !!isVoiceMode,
+            lang: appLang
           }),
           signal: state.abortCtrl.signal
         });
@@ -1226,7 +1274,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       const btn = document.getElementById("micBtn");
       if (recognition) { recognition.stop(); recognition = null; btn.classList.remove("recording"); return; }
       recognition = new SR();
-      recognition.lang = "en-US";
+      recognition.lang = appLang === "am" ? "am-ET" : "en-US";
       recognition.onresult = (e) => {
         const t = e.results[0][0].transcript;
         const inp = document.getElementById("promptInput");
@@ -1430,7 +1478,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) return;
       voiceRec = new SR();
-      voiceRec.lang = "en-US";
+      voiceRec.lang = appLang === "am" ? "am-ET" : "en-US";
       voiceRec.continuous = true;
       voiceRec.interimResults = true;
       let bufferText = "";
@@ -1501,7 +1549,8 @@ const HTML_PAGE = `<!DOCTYPE html>
             messages: msgs.map(m => ({ role: m.role, content: m.content })),
             apiKey: state.apiKey,
             systemPrompt: state.customInst,
-            voice: cfg.voice
+            voice: cfg.voice,
+            lang: appLang
           })
         });
         const data = await res.json();
@@ -1752,8 +1801,9 @@ async function handleMiniAppChat(request, env) {
     const deepNote = (!body.fastVoice && body.model === "qwen/qwen3.8-27b")
       ? " Provide a thorough, well-structured Deep Research analysis with clear sections, key insights, and practical takeaways."
       : "";
+    const chatLangNote = body.lang === "am" ? " Always reply in natural, clear Amharic." : "";
     const voiceNote = body.fastVoice ? " Speak like a warm, natural human friend in a live voice call—reply in 1 short, expressive sentence with no markdown or lists." : deepNote;
-    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11, Class B student—never invent his school name, age, or any unstated facts—and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
+    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Respond in the same language the user uses—if they write or speak in Amharic (Fidel or Latin/Amharic), reply fluently in clear, natural Amharic. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11, Class B student—never invent his school name, age, or any unstated facts—and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote + chatLangNote;
     const rawMsgs = body.messages || [];
     const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
     const messages = [{ role: "system", content: systemPrompt }, ...rawMsgs.map(m => {
@@ -1854,8 +1904,9 @@ async function handleFastVoice(request, env) {
     const key = body.apiKey || env.AI_API_KEY;
     if (!key) return Response.json({ error: "Missing AI_API_KEY" }, { status: 400 });
 
+    const langHint = body.lang === "am" ? " Reply in clear, natural Amharic (using Ethiopic script)." : "";
     const sys = (body.systemPrompt || "You are Orvix AI, created by Bereket Tesfaye, a Grade 11 Class B student. Never invent any extra details about him; if asked who created you, say Bereket Tesfaye (Grade 11, Class B) and share Telegram @orvix16 or phone 0960934894.") +
-      " You are on a live voice call like a real, warm human friend. React naturally, listen carefully, keep replies super crisp (1 to 2 natural spoken sentences, under 25 words), never use markdown, lists, or robotic filler.";
+      " You are on a live voice call like a real, warm human friend. React naturally, listen carefully, keep replies super crisp (1 to 2 natural spoken sentences, under 25 words), never use markdown, lists, or robotic filler." + langHint;
     const msgs = [{ role: "system", content: sys }, ...(body.messages || []).slice(-6).map(m => ({ role: m.role, content: m.content }))];
 
     let llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -1879,7 +1930,9 @@ async function handleFastVoice(request, env) {
     let mime = "audio/wav";
     let ttsError = "";
     let ttsSource = "";
+    const isAmharic = body.lang === "am" || /[\u1200-\u137F]/.test(clean);
     if (clean) {
+      if (!isAmharic) {
       try {
         const ttsRes = await fetch("https://api.groq.com/openai/v1/audio/speech", {
           method: "POST",
@@ -1904,9 +1957,11 @@ async function handleFastVoice(request, env) {
           ttsError = "Groq TTS " + ttsRes.status + ": " + (await ttsRes.text()).slice(0, 90);
         }
       } catch (e) { ttsError = e.message; }
+      }
       if (!audioBase64) {
         try {
-          const gtUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=" + encodeURIComponent(clean);
+          const gtLang = isAmharic ? "am" : "en";
+          const gtUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=" + gtLang + "&q=" + encodeURIComponent(clean);
           const gtRes = await fetch(gtUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(3000) });
           if (gtRes.ok) {
             const buf = new Uint8Array(await gtRes.arrayBuffer());
@@ -2132,7 +2187,7 @@ async function handleTelegramWebhook(request, env, origin) {
 }
 
 async function askBotAI(env, history) {
-  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11, Class B student—never invent his school name, age, or any unstated facts—and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
+  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Respond in the same language the user uses—if they write or speak in Amharic (Fidel or Latin/Amharic), reply fluently in clear, natural Amharic. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11, Class B student—never invent his school name, age, or any unstated facts—and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
   history = [sysMsg, ...history];
   if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
