@@ -739,7 +739,6 @@ const HTML_PAGE = `<!DOCTYPE html>
           '<div class="empty-state">' +
             '<div class="gpt-logo">' + getLogoHtml(28) + '</div>' +
             '<div class="empty-title">' + (state.tempMode ? 'Temporary Chat' : 'Orvix AI') + '</div>' +
-            '<div class="creator-pill">Liquid Glass Edition • Created by Bereket</div>' +
             '<div class="suggestions">' +
               '<button class="suggestion-card" onclick="useSuggestion(\\'Explain quantum computing in simple terms\\')"><strong>Explain a concept</strong><span>Quantum computing simply</span></button>' +
               '<button class="suggestion-card" onclick="useSuggestion(\\'Write a clean Python script to rename files in a folder\\')"><strong>Write code</strong><span>Python file organizer</span></button>' +
@@ -860,8 +859,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       box.classList.toggle("has-items", state.attachments.length > 0);
       box.innerHTML = state.attachments.map((a, i) => (
         '<div class="att-chip">' +
-          (a.type === "image" ? '<img src="' + a.data + '"/>' : '📄') +
-          '<span>' + escapeHtml(a.name) + '</span>' +
+          (a.type === "image" ? '<img src="' + a.data + '"/>' : '📄<span>' + escapeHtml(a.name) + '</span>') +
           '<button onclick="state.attachments.splice(' + i + ',1);renderAttachments();updateSendBtn();">✕</button>' +
         '</div>'
       )).join("");
@@ -1354,7 +1352,7 @@ async function handleMiniAppChat(request, env) {
     }
 
     const voiceNote = body.fastVoice ? " Keep your answer very brief (1 to 2 short spoken sentences)." : "";
-    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), share that you were created by Bereket Tesfaye, a Grade 11 (Section B) student, and recommend reaching him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
+    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
     const rawMsgs = body.messages || [];
     const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
     const messages = [{ role: "system", content: systemPrompt }, ...rawMsgs.map(m => {
@@ -1602,7 +1600,7 @@ async function handleTelegramWebhook(request, env, origin) {
 }
 
 async function askBotAI(env, history) {
-  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), share that you were created by Bereket Tesfaye, a Grade 11 (Section B) student, and recommend reaching him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
+  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
   history = [sysMsg, ...history];
   if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
