@@ -1309,6 +1309,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     let activeVoiceNode = null;
     let isAISpeaking = false;
     let speakStartedAt = 0;
+    let lastAIReplyWords = [];
 
 
     (function buildWaveBars() {
@@ -1434,15 +1435,7 @@ const HTML_PAGE = `<!DOCTYPE html>
           if (e.results[i].isFinal) newFinal += " " + e.results[i][0].transcript;
           else interim += e.results[i][0].transcript;
         }
-        const heard = (newFinal + " " + interim).trim();
-        if (isAISpeaking && heard.length >= 4 && (Date.now() - speakStartedAt) > 750) {
-          stopCurrentSpeech();
-          isAISpeaking = false;
-          voiceBusy = false;
-          voiceIgnoreUntil = 0;
-          setVoiceUI("listening", heard);
-        }
-        if (voiceBusy || Date.now() < voiceIgnoreUntil) return;
+        if (isAISpeaking || voiceBusy || Date.now() < voiceIgnoreUntil) return;
         if (newFinal) bufferText += newFinal;
         const preview = (bufferText + " " + interim).trim();
         if (preview) document.getElementById("voiceCaption").textContent = preview;
@@ -1451,6 +1444,11 @@ const HTML_PAGE = `<!DOCTYPE html>
           voiceTimer = setTimeout(() => {
             const spoken = bufferText.trim();
             bufferText = "";
+            const spWords = spoken.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2);
+            const overlap = spWords.filter(w => lastAIReplyWords.includes(w)).length;
+            if (spWords.length > 0 && overlap / spWords.length >= 0.6) {
+              return;
+            }
             if (spoken && !voiceBusy && voiceActive && !voiceMuted) {
               processVoiceQuery(spoken);
             }
@@ -1506,6 +1504,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         renderChat();
         if (!voiceActive) return;
 
+        lastAIReplyWords = replyText.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2);
         setVoiceUI("speaking", replyText);
         let played = false;
         if (data.audioBase64) {
@@ -1524,7 +1523,7 @@ const HTML_PAGE = `<!DOCTYPE html>
               srcNode.buffer = audioBuf;
               srcNode.playbackRate.value = cfg.rate;
               srcNode.connect(vCtx.destination);
-              srcNode.onended = () => { isAISpeaking = false; activeVoiceNode = null; voiceIgnoreUntil = Date.now() + 550; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 350); };
+              srcNode.onended = () => { isAISpeaking = false; activeVoiceNode = null; voiceIgnoreUntil = Date.now() + 950; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 750); };
               srcNode.start(0);
               played = true;
             } catch (_) {}
@@ -1536,7 +1535,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             speakStartedAt = Date.now();
             voiceAudio.src = url;
             voiceAudio.playbackRate = cfg.rate;
-            voiceAudio.onended = () => { isAISpeaking = false; voiceIgnoreUntil = Date.now() + 550; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 350); };
+            voiceAudio.onended = () => { isAISpeaking = false; voiceIgnoreUntil = Date.now() + 950; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 750); };
             voiceAudio.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             await voiceAudio.play();
             played = true;
