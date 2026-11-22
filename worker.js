@@ -277,109 +277,55 @@ const HTML_PAGE = `<!DOCTYPE html>
       background: var(--text-primary); animation: pulse 1s infinite; margin-left: 4px;
     }
 
-    /* Voice Conversation Mode Overlay */
+    /* Voice Conversation Mode Overlay (ChatGPT-Style) */
     .voice-overlay {
-      position: fixed; inset: 0; background: var(--bg-main); z-index: 90;
+      position: fixed; inset: 0; z-index: 90;
+      background: radial-gradient(circle at 50% 42%, #132238 0%, #090d14 70%, #05070a 100%);
+      color: #f8fafc;
       display: none; flex-direction: column; align-items: center; justify-content: space-between;
-      padding: calc(24px + env(safe-area-inset-top)) 20px calc(32px + env(safe-area-inset-bottom));
+      padding: calc(20px + env(safe-area-inset-top)) 20px calc(30px + env(safe-area-inset-bottom));
     }
     .voice-overlay.open { display: flex; }
     .voice-top { width: 100%; display: flex; justify-content: space-between; align-items: center; }
-    .voice-status-badge { font-size: 13px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.02em; }
-    .voice-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; width: 100%; max-width: 420px; text-align: center; }
-    .voice-orb {
-      width: 150px; height: 150px; border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%, #34d399, #059669 60%, #064e3b);
-      box-shadow: 0 0 40px rgba(16, 163, 127, 0.35);
-      transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.3s ease;
-      cursor: pointer;
+    .voice-status-badge {
+      font-size: 13px; font-weight: 600; color: #e2e8f0;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+      padding: 6px 14px; border-radius: 999px; backdrop-filter: blur(12px);
     }
-    .voice-orb.listening { animation: orbListen 1.6s infinite ease-in-out; }
-    .voice-orb.thinking { background: radial-gradient(circle at 35% 35%, #60a5fa, #2563eb 60%, #1e3a8a); box-shadow: 0 0 45px rgba(59, 130, 246, 0.45); animation: orbSpin 1.2s infinite linear; }
-    .voice-orb.speaking { background: radial-gradient(circle at 35% 35%, #a7f3d0, #10a37f 60%, #065f46); animation: orbSpeak 0.6s infinite alternate ease-in-out; }
-    @keyframes orbListen { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-    @keyframes orbSpeak { 0% { transform: scale(1); } 100% { transform: scale(1.16); } }
-    @keyframes orbSpin { 0% { transform: scale(0.96) rotate(0deg); } 50% { transform: scale(1.03) rotate(180deg); } 100% { transform: scale(0.96) rotate(360deg); } }
-    .voice-caption { font-size: 15px; line-height: 1.5; color: var(--text-secondary); min-height: 48px; max-height: 140px; overflow-y: auto; padding: 0 12px; }
+    .voice-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; width: 100%; max-width: 400px; text-align: center; }
+    .voice-orb {
+      width: 176px; height: 176px; border-radius: 50%; position: relative; cursor: pointer;
+      background:
+        radial-gradient(circle at 32% 28%, rgba(255,255,255,0.92) 0%, rgba(125,211,252,0.85) 28%, rgba(14,165,233,0.9) 62%, rgba(3,105,161,0.98) 100%);
+      box-shadow: 0 0 60px rgba(56, 189, 248, 0.45), inset 0 0 32px rgba(255,255,255,0.4);
+      transition: transform 0.2s ease, box-shadow 0.25s ease;
+    }
+    .voice-orb.listening { animation: orbFloat 2.4s infinite ease-in-out; }
+    .voice-orb.thinking {
+      background: radial-gradient(circle at 35% 30%, #e0e7ff 0%, #818cf8 40%, #4f46e5 85%);
+      box-shadow: 0 0 70px rgba(129, 140, 248, 0.55);
+      animation: orbThink 1.1s infinite linear;
+    }
+    .voice-orb.speaking {
+      background: radial-gradient(circle at 35% 30%, #ffffff 0%, #7dd3fc 30%, #0284c7 70%, #0369a1 100%);
+      box-shadow: 0 0 85px rgba(56, 189, 248, 0.75);
+      animation: orbSpeak 0.45s infinite alternate ease-in-out;
+    }
+    @keyframes orbFloat { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    @keyframes orbSpeak { 0% { transform: scale(1); } 100% { transform: scale(1.14); } }
+    @keyframes orbThink { 0% { transform: scale(0.96) rotate(0deg); } 50% { transform: scale(1.04) rotate(180deg); } 100% { transform: scale(0.96) rotate(360deg); } }
+    .voice-caption { font-size: 16px; line-height: 1.5; color: rgba(248,250,252,0.86); min-height: 48px; max-height: 130px; overflow-y: auto; padding: 0 14px; font-weight: 400; }
+    .voice-fallback-row { width: 100%; max-width: 380px; display: none; gap: 8px; margin-bottom: 14px; }
+    .voice-fallback-row.open { display: flex; }
     .voice-controls { display: flex; align-items: center; gap: 22px; }
     .voice-ctrl-btn {
-      width: 56px; height: 56px; border-radius: 50%; background: var(--bg-composer);
-      border: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: center;
-      color: var(--text-primary); font-size: 18px;
+      width: 58px; height: 58px; border-radius: 50%; background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;
+      color: #f8fafc; font-size: 20px; backdrop-filter: blur(12px);
     }
     .voice-ctrl-btn.end { background: #ef4444; color: #fff; border-color: transparent; }
-    .voice-ctrl-btn.muted { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-
-    :root {
-      --chat-font-size: 15px;
-      --app-brightness: 1;
-      --brand-accent: #10a37f;
-      --glass-bg: rgba(255, 255, 255, 0.06);
-      --glass-border: rgba(255, 255, 255, 0.14);
-    }
-    html.light {
-      --glass-bg: rgba(255, 255, 255, 0.72);
-      --glass-border: rgba(0, 0, 0, 0.09);
-    }
-    body {
-      filter: brightness(var(--app-brightness));
-      background: radial-gradient(circle at 20% 10%, rgba(16, 163, 127, 0.14), transparent 42%),
-                  radial-gradient(circle at 85% 80%, rgba(59, 130, 246, 0.12), transparent 45%),
-                  var(--bg-main);
-    }
-    .assistant-content, .msg-bubble-user { font-size: var(--chat-font-size) !important; }
-    .topbar, .composer-box, .suggestion-card, .modal {
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-    }
-    .suggestion-card {
-      background: var(--glass-bg) !important;
-      border: 1px solid var(--glass-border) !important;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-    }
-    .composer-box {
-      background: var(--glass-bg) !important;
-      border: 1px solid var(--glass-border) !important;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22);
-    }
-    .gpt-logo {
-      width: 64px !important; height: 64px !important;
-      background: linear-gradient(135deg, rgba(16,163,127,0.28), rgba(59,130,246,0.28)) !important;
-      border: 1px solid var(--glass-border) !important;
-      box-shadow: 0 10px 30px rgba(16, 163, 127, 0.25);
-      overflow: hidden;
-    }
-    .gpt-logo img, .assistant-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-    .creator-pill {
-      font-size: 12px; color: var(--text-secondary); background: var(--glass-bg);
-      border: 1px solid var(--glass-border); padding: 5px 12px; border-radius: 999px;
-      backdrop-filter: blur(12px);
-    }
-    .msg-img-preview { max-width: 220px; border-radius: 12px; margin-bottom: 6px; display: block; }
-
-    .analysing-pill {
-      display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px;
-      border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border);
-      font-size: 13px; font-weight: 500; color: var(--text-secondary);
-      backdrop-filter: blur(12px);
-    }
-    .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
-    .user-meta { display: flex; flex-direction: column; min-width: 0; }
-    .user-handle { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    .about-creator {
-      padding: 10px 12px 12px; border-top: 1px solid var(--border-subtle);
-      display: flex; flex-direction: column; gap: 6px; font-size: 12px;
-    }
-    .about-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    .about-links { display: flex; gap: 8px; flex-wrap: wrap; }
-    .about-link {
-      display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px;
-      border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border);
-      color: var(--text-primary); text-decoration: none; font-size: 12px; font-weight: 500;
-    }
-    .about-link:hover { background: var(--bg-hover); }
-  </style>
+    .voice-ctrl-btn.muted { background: rgba(239, 68, 68, 0.25); color: #fca5a5; }
+  </style>  </style>
 </head>
 <body>
   <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar(false)"></div>
@@ -474,15 +420,15 @@ const HTML_PAGE = `<!DOCTYPE html>
       <div id="voiceOrb" class="voice-orb listening" onclick="onOrbTap()"></div>
       <div id="voiceCaption" class="voice-caption">Listening... Speak now</div>
     </div>
-    <div style="width:100%; max-width:420px; display:flex; gap:8px; margin-bottom:12px;">
-      <input id="voiceFallbackInput" class="field-input" type="text" placeholder="Or type / use keyboard mic here..." onkeydown="if(event.key===\Enter\) sendVoiceFallback()" />
-      <button class="btn-primary" onclick="sendVoiceFallback()">Send</button>
+        <div id="voiceFallbackRow" class="voice-fallback-row">
+      <input id="voiceFallbackInput" class="field-input" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.18);" type="text" placeholder="Type to Orvix..." onkeydown="if(event.key===\\'Enter\\') sendVoiceFallback()" />
+      <button class="btn-primary" style="background:#38bdf8;color:#082f49;" onclick="sendVoiceFallback()">Send</button>
     </div>
     <div class="voice-controls">
       <button id="voiceMuteBtn" class="voice-ctrl-btn" onclick="toggleVoiceMute()" title="Mute/Unmute">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
       </button>
-      <button class="voice-ctrl-btn" onclick="if(window._lastVoiceAudioUrl){voiceAudio.src=window._lastVoiceAudioUrl;voiceAudio.play().catch(()=>{});}" title="Replay Voice">🔊</button>
+      <button class="voice-ctrl-btn" onclick="document.getElementById('voiceFallbackRow').classList.toggle('open')" title="Type message">⌨️</button>
       <button class="voice-ctrl-btn end" onclick="closeVoiceMode()" title="End Voice Mode">✕</button>
     </div>
   </div>
@@ -1229,7 +1175,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             if (spoken && !voiceBusy && voiceActive && !voiceMuted) {
               processVoiceQuery(spoken);
             }
-          }, 250);
+          }, 180);
         }
       };
 
@@ -1278,7 +1224,7 @@ const HTML_PAGE = `<!DOCTYPE html>
               const audioBuf = await vCtx.decodeAudioData(buf.slice(0));
               const srcNode = vCtx.createBufferSource();
               srcNode.buffer = audioBuf;
-              srcNode.playbackRate.value = 1.25;
+              srcNode.playbackRate.value = 1.12;
               srcNode.connect(vCtx.destination);
               srcNode.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
               srcNode.start(0);
@@ -1294,7 +1240,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             });
             window._lastVoiceAudioUrl = dataUrl;
             voiceAudio.src = dataUrl;
-            voiceAudio.playbackRate = 1.25;
+            voiceAudio.playbackRate = 1.12;
             voiceAudio.onended = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             voiceAudio.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
             await voiceAudio.play();
@@ -1418,7 +1364,7 @@ async function handleMiniAppChat(request, env) {
     const deepNote = (!body.fastVoice && body.model === "qwen/qwen3.8-27b")
       ? " Provide a thorough, well-structured Deep Research analysis with clear sections, key insights, and practical takeaways."
       : "";
-    const voiceNote = body.fastVoice ? " Keep your answer very brief (1 to 2 short spoken sentences)." : deepNote;
+    const voiceNote = body.fastVoice ? " Speak like a warm, natural human friend in a live voice call—reply in 1 short, expressive sentence with no markdown or lists." : deepNote;
     const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful, concise, and accurate AI assistant created by Bereket Tesfaye. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11 (Section B) student, and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote;
     const rawMsgs = body.messages || [];
     const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
@@ -1459,7 +1405,7 @@ async function handleMiniAppChat(request, env) {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + apiKey
       },
-      body: JSON.stringify({ model, messages, stream: true, max_tokens: body.fastVoice ? 100 : (model === "qwen/qwen3.8-27b" ? 700 : undefined) })
+      body: JSON.stringify({ model, messages, stream: true, max_tokens: body.fastVoice ? 75 : (model === "qwen/qwen3.8-27b" ? 700 : undefined) })
     });
 
     if (!upstream.ok) {
@@ -1497,7 +1443,7 @@ async function handleTTS(request, env) {
           },
           body: JSON.stringify({
             model: "canopylabs/orpheus-v1-english",
-            voice: voice || "troy",
+            voice: voice || "hannah",
             input: clean,
             response_format: "wav"
           })
