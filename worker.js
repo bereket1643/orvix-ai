@@ -1446,7 +1446,7 @@ async function handleMiniAppChat(request, env) {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + apiKey
       },
-      body: JSON.stringify({ model, messages, stream: true, max_tokens: body.fastVoice ? 100 : undefined })
+      body: JSON.stringify({ model, messages, stream: true, max_tokens: body.fastVoice ? 100 : (model === "qwen/qwen3.8-27b" ? 700 : undefined) })
     });
 
     if (!upstream.ok) {
@@ -1719,6 +1719,7 @@ async function askBotVision(env, prompt, dataUrl) {
     },
     body: JSON.stringify({
       model,
+      max_tokens: 700,
       messages: [{
         role: "user",
         content: [
