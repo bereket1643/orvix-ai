@@ -402,30 +402,34 @@ const HTML_PAGE = `<!DOCTYPE html>
       box-shadow: 0 0 32px rgba(56, 189, 248, 0.42), 0 0 60px rgba(16, 163, 127, 0.24) !important;
       border-color: rgba(56, 189, 248, 0.65) !important;
     }
-    .wave-card {
-      width: 100%; max-width: 360px; padding: 16px 18px 14px; border-radius: 18px;
-      background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12);
-      backdrop-filter: blur(16px); display: flex; flex-direction: column; gap: 14px;
+    .orb-stage {
+      position: relative; width: 230px; height: 230px;
+      display: flex; align-items: center; justify-content: center;
     }
-    .wave-bars {
-      height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 4px;
+    .radial-bars {
+      position: absolute; inset: 0; pointer-events: none;
     }
-    .wave-bar {
-      width: 4px; height: 6px; border-radius: 999px;
-      background: linear-gradient(180deg, #a855f7, #6366f1);
-      transition: height 0.12s ease, opacity 0.15s ease; opacity: 0.65;
+    .r-bar {
+      position: absolute; left: 50%; top: 50%; width: 3px; height: 14px;
+      margin-left: -1.5px; border-radius: 999px;
+      background: linear-gradient(180deg, #38bdf8, #10a37f);
+      transform-origin: 50% 108px;
+      opacity: 0.45; transition: height 0.14s ease, opacity 0.15s ease;
     }
-    .wave-bars.active .wave-bar {
-      opacity: 1; animation: waveDance 0.7s infinite ease-in-out alternate;
+    .radial-bars.active .r-bar {
+      opacity: 0.95; animation: radialPulse 0.65s infinite ease-in-out alternate;
     }
-    @keyframes waveDance { 0% { height: 6px; } 100% { height: 28px; } }
-    .wave-meta { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #cbd5e1; }
-    .wave-dot-wrap { display: flex; align-items: center; gap: 8px; }
-    .wave-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981; }
-    .mic-meter-wrap { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.08em; color: #94a3b8; }
-    .mic-meter-bg { width: 64px; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; }
-    .mic-meter-fill { width: 25%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #8b5cf6, #38bdf8); transition: width 0.15s ease; }
-  </style>  </style>
+    @keyframes radialPulse { 0% { height: 10px; } 100% { height: 26px; } }
+    .orvix-meter-pill {
+      display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px;
+      border-radius: 999px; background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(125,211,252,0.22); backdrop-filter: blur(14px);
+      font-size: 12px; color: #cbd5e1;
+    }
+    .wave-dot { width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 10px #38bdf8; }
+    .mic-meter-bg { width: 58px; height: 5px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; }
+    .mic-meter-fill { width: 25%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10a37f, #38bdf8); transition: width 0.15s ease; }
+  </style>  </style>  </style>
 </head>
 <body>
   <div id="splashScreen" class="splash-screen">
@@ -531,17 +535,18 @@ const HTML_PAGE = `<!DOCTYPE html>
       </div>
     </div>
     <div class="voice-center">
-      <div id="voiceOrb" class="voice-orb listening" onclick="onOrbTap()"></div>
+      <div class="orb-stage">
+        <div id="waveBars" class="radial-bars active"></div>
+        <div id="voiceOrb" class="voice-orb listening" onclick="onOrbTap()"></div>
+      </div>
       <div id="voiceCaption" class="voice-caption">Listening... Speak now</div>
-      <div class="wave-card">
-        <div id="waveBars" class="wave-bars active"></div>
-        <div class="wave-meta">
-          <div class="wave-dot-wrap"><span class="wave-dot"></span><span id="waveStateText">Listening for voice...</span></div>
-          <div class="mic-meter-wrap"><span>MIC LEVEL</span><div class="mic-meter-bg"><div id="micMeterFill" class="mic-meter-fill"></div></div></div>
-        </div>
+      <div class="orvix-meter-pill">
+        <span class="wave-dot"></span>
+        <span id="waveStateText">Orvix Listening</span>
+        <div class="mic-meter-bg"><div id="micMeterFill" class="mic-meter-fill"></div></div>
       </div>
     </div>
-        <div id="voiceFallbackRow" class="voice-fallback-row">
+    <div id="voiceFallbackRow" class="voice-fallback-row">
       <input id="voiceFallbackInput" class="field-input" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.18);" type="text" placeholder="Type to Orvix..." onkeydown="if(event.key===\\'Enter\\') sendVoiceFallback()" />
       <button class="btn-primary" style="background:#38bdf8;color:#082f49;" onclick="sendVoiceFallback()">Send</button>
     </div>
@@ -1306,9 +1311,11 @@ const HTML_PAGE = `<!DOCTYPE html>
       const wb = document.getElementById("waveBars");
       if (!wb) return;
       let h = "";
-      for (let i = 0; i < 28; i++) {
-        const delay = ((i % 7) * 0.09).toFixed(2);
-        h += '<div class="wave-bar" style="animation-delay:' + delay + 's"></div>';
+      const count = 32;
+      for (let i = 0; i < count; i++) {
+        const deg = (i * (360 / count)).toFixed(1);
+        const delay = ((i % 8) * 0.08).toFixed(2);
+        h += '<div class="r-bar" style="top:4px;transform:rotate(' + deg + 'deg);animation-delay:' + delay + 's"></div>';
       }
       wb.innerHTML = h;
     })();
@@ -1506,6 +1513,9 @@ const HTML_PAGE = `<!DOCTYPE html>
             await voiceAudio.play();
             played = true;
           }
+        }
+        if (!played && data.ttsError) {
+          document.getElementById("voiceStatusBadge").textContent = data.ttsError.slice(0, 55);
         }
         if (!played) {
           if ("speechSynthesis" in window) {
@@ -1745,6 +1755,8 @@ async function handleFastVoice(request, env) {
 
     let audioBase64 = "";
     let mime = "audio/wav";
+    let ttsError = "";
+    let ttsSource = "";
     if (clean) {
       try {
         const ttsRes = await fetch("https://api.groq.com/openai/v1/audio/speech", {
@@ -1764,8 +1776,11 @@ async function handleFastVoice(request, env) {
             bin += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
           }
           audioBase64 = btoa(bin);
+          ttsSource = "orpheus";
+        } else {
+          ttsError = "Groq TTS " + ttsRes.status + ": " + (await ttsRes.text()).slice(0, 90);
         }
-      } catch (_) {}
+      } catch (e) { ttsError = e.message; }
       if (!audioBase64) {
         try {
           const gtUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=" + encodeURIComponent(clean);
@@ -1778,11 +1793,13 @@ async function handleFastVoice(request, env) {
             }
             audioBase64 = btoa(bin);
             mime = "audio/mpeg";
+            ttsSource = "gtts";
+            ttsError = "";
           }
         } catch (_) {}
       }
     }
-    return Response.json({ reply, audioBase64, mime });
+    return Response.json({ reply, audioBase64, mime, ttsSource, ttsError });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }
