@@ -1496,7 +1496,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       try {
         const res = await fetch("/api/voice", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": tg ? (tg.initData || "") : "" },
           body: JSON.stringify({
             messages: msgs.map(m => ({ role: m.role, content: m.content })),
             apiKey: state.apiKey,
@@ -1582,6 +1582,64 @@ const HTML_PAGE = `<!DOCTYPE html>
 // Lightweight per-isolate bot conversation memory for direct Telegram chat
 const botMemory = new Map();
 
+const memUsers = new Set();
+const memTodayUsers = new Set();
+let memTotalMsgs = 0;
+
+async function trackUsage(env, userId, username, firstName, isMessage) {
+  const uid = String(userId || "anon");
+  const today = new Date().toISOString().slice(0, 10);
+  memUsers.add(uid);
+  memTodayUsers.add(today + ":" + uid);
+  if (isMessage) memTotalMsgs++;
+
+  if (!env.USERS_KV) return;
+  try {
+    const userKey = "u:" + uid;
+    const existing = await env.USERS_KV.get(userKey);
+    if (!existing) {
+      await env.USERS_KV.put(userKey, JSON.stringify({
+        username: username || "",
+        firstName: firstName || "",
+        firstSeen: new Date().toISOString()
+      }));
+      const totalU = parseInt((await env.USERS_KV.get("stat:total_users")) || "0", 10) + 1;
+      await env.USERS_KV.put("stat:total_users", String(totalU));
+    }
+    const dayKey = "d:" + today + ":" + uid;
+    const seenToday = await env.USERS_KV.get(dayKey);
+    if (!seenToday) {
+      await env.USERS_KV.put(dayKey, "1", { expirationTtl: 172800 });
+      const todayU = parseInt((await env.USERS_KV.get("stat:day:" + today)) || "0", 10) + 1;
+      await env.USERS_KV.put("stat:day:" + today, String(todayU), { expirationTtl: 172800 });
+    }
+    if (isMessage) {
+      const totalM = parseInt((await env.USERS_KV.get("stat:total_msgs")) || "0", 10) + 1;
+      await env.USERS_KV.put("stat:total_msgs", String(totalM));
+    }
+  } catch (_) {}
+}
+
+async function getStatsText(env) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (!env.USERS_KV) {
+    return "Orvix AI Stats (Temporary Memory)\n\n" +
+      "Total Users: " + memUsers.size + "\n" +
+      "Total Messages: " + memTotalMsgs + "\n\n" +
+      "Tip: Bind a free Cloudflare KV named USERS_KV in Settings -> Bindings for permanent user tracking.";
+  }
+  const [totalU, todayU, totalM] = await Promise.all([
+    env.USERS_KV.get("stat:total_users"),
+    env.USERS_KV.get("stat:day:" + today),
+    env.USERS_KV.get("stat:total_msgs")
+  ]);
+  return "Orvix AI Live Stats (" + today + ")\n\n" +
+    "Total Unique Users: " + (totalU || "0") + "\n" +
+    "Active Today: " + (todayU || "0") + "\n" +
+    "Total Messages & Voice Turns: " + (totalM || "0");
+}
+
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1638,6 +1696,16 @@ export default {
   }
 };
 
+
+function extractTgUser(initData) {
+  try {
+    const params = new URLSearchParams(initData || "");
+    const uStr = params.get("user");
+    if (uStr) return JSON.parse(uStr);
+  } catch (_) {}
+  return null;
+}
+
 async function verifyTelegramInitData(initData, botToken) {
   if (!initData || !botToken) return false;
   const params = new URLSearchParams(initData);
@@ -1666,6 +1734,10 @@ async function handleMiniAppChat(request, env) {
   try {
     const body = await request.json();
     const initData = request.headers.get("X-Telegram-Init-Data") || "";
+    const tgUser = extractTgUser(initData);
+    if (tgUser && tgUser.id) {
+      await trackUsage(env, tgUser.id, tgUser.username, tgUser.first_name, true);
+    }
     if (env.STRICT_TELEGRAM_AUTH === "true" && env.BOT_TOKEN) {
       const valid = await verifyTelegramInitData(initData, env.BOT_TOKEN);
       if (!valid) return new Response("Unauthorized Telegram Mini App session", { status: 401 });
@@ -1775,6 +1847,10 @@ async function handleSuggestions(request, env) {
 async function handleFastVoice(request, env) {
   try {
     const body = await request.json();
+    const fvUser = extractTgUser(request.headers.get("X-Telegram-Init-Data") || "");
+    if (fvUser && fvUser.id) {
+      await trackUsage(env, fvUser.id, fvUser.username, fvUser.first_name, true);
+    }
     const key = body.apiKey || env.AI_API_KEY;
     if (!key) return Response.json({ error: "Missing AI_API_KEY" }, { status: 400 });
 
@@ -1964,6 +2040,8 @@ async function handleTelegramWebhook(request, env, origin) {
   if (!msg || (!msg.text && !msg.photo)) return new Response("OK");
 
   const chatId = msg.chat.id;
+  const fromU = msg.from || {};
+  await trackUsage(env, fromU.id || chatId, fromU.username, fromU.first_name, !!(msg.photo || (msg.text && !msg.text.startsWith("/"))));
   if (msg.photo && msg.photo.length > 0) {
     await tgCall(env.BOT_TOKEN, "sendChatAction", { chat_id: chatId, action: "typing" });
     const fileId = msg.photo[msg.photo.length - 1].file_id;
@@ -2011,6 +2089,17 @@ async function handleTelegramWebhook(request, env, origin) {
   if (text === "/new") {
     botMemory.delete(chatId);
     await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "Started a fresh conversation." });
+    return new Response("OK");
+  }
+
+  if (text === "/stats") {
+    const uname = (fromU.username || "").toLowerCase();
+    if (uname !== "orvix16") {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "This command is only available to the bot owner." });
+      return new Response("OK");
+    }
+    const report = await getStatsText(env);
+    await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: report });
     return new Response("OK");
   }
 
