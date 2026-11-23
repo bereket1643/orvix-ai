@@ -1796,6 +1796,18 @@ export default {
       return withCors(await handleFastVoice(request, env));
     }
 
+    if (request.method === "POST" && url.pathname === "/api/auth/send-otp") {
+      return withCors(await handleSendOtp(request, env));
+    }
+    if (request.method === "POST" && url.pathname === "/api/auth/google") {
+      return withCors(await handleGoogleAuth(request, env));
+    }
+    if (request.method === "GET" && url.pathname === "/api/auth/config") {
+      return withCors(Response.json({
+        otpEnabled: !!env.BREVO_API_KEY,
+        googleClientId: env.GOOGLE_CLIENT_ID || ""
+      }));
+    }
     if (request.method === "POST" && url.pathname === "/api/auth/signup") {
       return withCors(await handleAuthSignup(request, env));
     }
@@ -1979,10 +1991,84 @@ async function verifyWebToken(token, secret) {
   } catch (_) { return null; }
 }
 
+
+async function handleSendOtp(request, env) {
+  try {
+    if (!env.USERS_KV) return Response.json({ error: "USERS_KV not bound." }, { status: 500 });
+    const { email } = await request.json();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return Response.json({ error: "Please enter a valid email address." }, { status: 400 });
+    }
+    if (!env.BREVO_API_KEY) {
+      return Response.json({ error: "Email OTP not configured yet (BREVO_API_KEY missing)." }, { status: 400 });
+    }
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await env.USERS_KV.put("otp:" + cleanEmail, code, { expirationTtl: 600 });
+
+    const senderEmail = env.SENDER_EMAIL || "noreply@orvix.ai";
+    const mailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": env.BREVO_API_KEY
+      },
+      body: JSON.stringify({
+        sender: { name: "Orvix AI", email: senderEmail },
+        to: [{ email: cleanEmail }],
+        subject: "Your Orvix AI Verification Code: " + code,
+        htmlContent: "<div style='font-family:sans-serif;padding:20px;'><h2>Orvix AI Verification</h2><p>Your 6-digit code is:</p><h1 style='letter-spacing:4px;color:#0ea5e9;'>" + code + "</h1><p>This code expires in 10 minutes.</p></div>"
+      })
+    });
+    if (!mailRes.ok) {
+      return Response.json({ error: "Email send failed: " + (await mailRes.text()).slice(0, 120) }, { status: 502 });
+    }
+    return Response.json({ ok: true });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
+async function handleGoogleAuth(request, env) {
+  try {
+    if (!env.USERS_KV) return Response.json({ error: "USERS_KV not bound." }, { status: 500 });
+    const { credential } = await request.json();
+    if (!credential) return Response.json({ error: "Missing Google credential." }, { status: 400 });
+    const vRes = await fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(credential));
+    if (!vRes.ok) return Response.json({ error: "Invalid Google token." }, { status: 401 });
+    const info = await vRes.json();
+    if (env.GOOGLE_CLIENT_ID && info.aud !== env.GOOGLE_CLIENT_ID) {
+      return Response.json({ error: "Google Client ID mismatch." }, { status: 401 });
+    }
+    const cleanEmail = String(info.email || "").trim().toLowerCase();
+    const cleanName = String(info.name || cleanEmail.split("@")[0] || "User").trim();
+    if (!cleanEmail || info.email_verified !== "true") {
+      return Response.json({ error: "Google email is not verified." }, { status: 401 });
+    }
+    if (env.BREVO_API_KEY) {
+      const savedOtp = await env.USERS_KV.get("otp:" + cleanEmail);
+      if (!savedOtp || String(otp || "").trim() !== savedOtp) {
+        return Response.json({ error: "Invalid or expired 6-digit verification code." }, { status: 400 });
+      }
+      await env.USERS_KV.delete("otp:" + cleanEmail);
+    }
+    const key = "auth:" + cleanEmail;
+    const existing = await env.USERS_KV.get(key);
+    if (!existing) {
+      await env.USERS_KV.put(key, JSON.stringify({ name: cleanName, email: cleanEmail, provider: "google", createdAt: new Date().toISOString() }));
+    }
+    await trackUsage(env, "web:" + cleanEmail, cleanEmail, cleanName, false);
+    const token = await signWebToken(cleanEmail, env.BOT_TOKEN);
+    return Response.json({ token, user: { name: cleanName, email: cleanEmail } });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
 async function handleAuthSignup(request, env) {
   try {
     if (!env.USERS_KV) return Response.json({ error: "Server storage (USERS_KV) not bound." }, { status: 500 });
-    const { name, email, password } = await request.json();
+    const { name, email, password, otp } = await request.json();
     const cleanEmail = String(email || "").trim().toLowerCase();
     const cleanName = String(name || "").trim();
     const pass = String(password || "");
