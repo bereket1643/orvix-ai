@@ -441,6 +441,14 @@ const HTML_PAGE = `<!DOCTYPE html>
     .swatch-btn.active { border-color: #fff; transform: scale(1.12); box-shadow: 0 0 12px rgba(255,255,255,0.4); }
     .chat-item-pin { opacity: 0.55; padding: 4px; font-size: 11px; }
     .chat-item-pin.pinned { opacity: 1; color: #facc15; }
+
+    .avatar { background: var(--brand-accent) !important; }
+    .composer-box:focus-within { border-color: var(--brand-accent) !important; }
+    .msg-bubble-user { border: 1px solid color-mix(in srgb, var(--brand-accent) 28%, transparent); }
+    .msg-pinned-badge {
+      display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+      color: #facc15; margin-bottom: 6px;
+    }
   </style>  </style>  </style>  </style>
 </head>
 <body>
@@ -604,8 +612,12 @@ const HTML_PAGE = `<!DOCTYPE html>
         </div>
       </div>
       <div>
-        <label class="field-label">Your Display Name (Profile)</label>
-        <input id="profileNameInput" class="field-input" type="text" placeholder="Enter your name..." />
+        <label class="field-label">Your Profile (Name &amp; Photo)</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input id="profileNameInput" class="field-input" type="text" placeholder="Enter your name..." />
+          <input id="profilePicInput" type="file" accept="image/*" hidden onchange="uploadProfilePic(this.files[0])" />
+          <button type="button" class="seg-btn" style="flex:0 0 auto;" onclick="document.getElementById('profilePicInput').click()">Photo</button>
+        </div>
       </div>
       <div>
         <label class="field-label">Accent Color</label>
@@ -735,7 +747,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         const adminSec = document.getElementById("adminOnlySettings");
         if (adminSec) adminSec.style.display = isOwner ? "flex" : "none";
       }
-      const sn = localStorage.getItem('tg_gpt_profile_name'); if (sn) { document.getElementById('userName').textContent = sn; document.getElementById('userAvatar').textContent = sn.charAt(0).toUpperCase(); }
+      const sn = localStorage.getItem('tg_gpt_profile_name'); const sp = localStorage.getItem('tg_gpt_profile_pic'); if (sn) { document.getElementById('userName').textContent = sn; if (!sp) document.getElementById('userAvatar').textContent = sn.charAt(0).toUpperCase(); } if (sp) { document.getElementById('userAvatar').innerHTML = '<img src="' + sp + '" alt=""/>'; }
       renderModelMenu();
       renderSidebar();
       renderChat();
@@ -831,6 +843,32 @@ const HTML_PAGE = `<!DOCTYPE html>
       const m = msgs[msgIdx];
       if (m && m.followups && m.followups[fIdx]) useSuggestion(m.followups[fIdx]);
     }
+
+    function togglePinMsg(idx) {
+      const msgs = getActiveMessages();
+      if (!msgs[idx]) return;
+      msgs[idx].pinned = !msgs[idx].pinned;
+      if (!state.tempMode) saveChats();
+      renderChat();
+    }
+    function uploadProfilePic(file) {
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement("canvas");
+          c.width = 128; c.height = 128;
+          c.getContext("2d").drawImage(img, 0, 0, 128, 128);
+          const small = c.toDataURL("image/jpeg", 0.85);
+          localStorage.setItem("tg_gpt_profile_pic", small);
+          document.getElementById("userAvatar").innerHTML = '<img src="' + small + '" alt=""/>';
+        };
+        img.src = r.result;
+      };
+      r.readAsDataURL(file);
+    }
+
     function applyAccent(hex) {
       document.documentElement.style.setProperty("--brand-accent", hex);
       localStorage.setItem("tg_gpt_accent", hex);
@@ -1078,10 +1116,12 @@ const HTML_PAGE = `<!DOCTYPE html>
             '<div class="msg-assistant-wrap">' +
               '<div class="assistant-avatar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg></div>' +
               '<div class="assistant-content">' +
+                (m.pinned ? '<div class="msg-pinned-badge">★ Pinned Message</div>' : '') +
                 (m.content ? renderMarkdown(m.content) : '<div class="analysing-pill"><span class="typing-dot"></span><span>' + (state.model === "qwen/qwen3.8-27b" ? "Orvix Deep Research analysing..." : "Orvix analysing...") + '</span></div>') +
                 (!state.isGenerating || idx < msgs.length - 1 ? (
                   '<div class="msg-actions">' +
                     '<button class="msg-action-btn" onclick="copyMsg(' + idx + ', this)">Copy</button>' +
+                    '<button class="msg-action-btn" onclick="togglePinMsg(' + idx + ')">' + (m.pinned ? '★ Pinned' : '☆ Pin') + '</button>' +
                     '<button class="msg-action-btn" onclick="speakMsg(' + idx + ')">Read aloud</button>' +
                     (idx === msgs.length - 1 ? '<button class="msg-action-btn" onclick="regenerate()">Regenerate</button>' : '') +
                   '</div>' +
@@ -2276,12 +2316,13 @@ async function handleAuthMe(request, env) {
 
 async function handleSuggestions(request, env) {
   try {
-    const { topics, apiKey } = await request.json();
+    const { topics, apiKey, mode: bodyMode } = await request.json();
     const key = apiKey || env.AI_API_KEY;
     if (!key || !topics || !topics.length) return Response.json({ items: [] });
 
-    const prompt = "Based on these recent user chat topics: " + topics.slice(0, 6).join(" | ") +
-      ". Generate 4 fresh, helpful, diverse next-question suggestion cards as a JSON array of objects with keys title (2-4 words), subtitle (3-5 words), and prompt (a full clear question). Return ONLY valid JSON array, no markdown.";
+    const prompt = (bodyMode === "followup")
+      ? ("Based on this AI reply: " + topics[0] + ". Suggest 3 short, natural follow-up questions the user might ask next as a JSON array of objects with keys title (3-6 words), subtitle (empty string), and prompt (a clear follow-up question in the same language). Return ONLY valid JSON array, no markdown.")
+      : ("Based on these recent user chat topics: " + topics.slice(0, 6).join(" | ") + ". Generate 4 fresh, helpful, diverse next-question suggestion cards as a JSON array of objects with keys title (2-4 words), subtitle (3-5 words), and prompt (a full clear question). Return ONLY valid JSON array, no markdown.");
 
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
