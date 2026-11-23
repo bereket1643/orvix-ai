@@ -508,6 +508,7 @@ const HTML_PAGE = `<!DOCTYPE html>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <textarea id="promptInput" class="composer-input" rows="1" placeholder="Message Orvix AI" oninput="autoResize(this); updateSendBtn();" onkeydown="handleKey(event)"></textarea>
+        <button id="webSearchBtn" class="icon-btn" onclick="toggleWebSearch()" title="Web Search">🌐</button>
         <button id="micBtn" class="icon-btn mic-btn" onclick="toggleVoice()" title="Voice input">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
         </button>
@@ -635,9 +636,9 @@ const HTML_PAGE = `<!DOCTYPE html>
     if (tg) { tg.ready(); tg.expand(); }
 
     const MODELS = [
-      { id: "openai/gpt-oss-20b", label: "Orvix Fast", desc: "Instant everyday answers & chat", provider: "groq", mode: "fast" },
-      { id: "openai/gpt-oss-120b", label: "Orvix Thinking", desc: "Smart reasoning, math & coding", provider: "groq", mode: "thinking" },
-      { id: "qwen/qwen3.8-27b", label: "Orvix Deep Research", desc: "In-depth analysis & multi-step research", provider: "groq", mode: "deep" }
+      { id: "openai/gpt-oss-120b", label: "Orvix Pro", desc: "Flagship 120B intelligence for coding, math & reasoning", provider: "groq", mode: "pro" },
+      { id: "openai/gpt-oss-20b", label: "Orvix Fast", desc: "Sub-second speed for everyday chat", provider: "groq", mode: "fast" },
+      { id: "qwen/qwen3.8-27b", label: "Orvix Deep Research", desc: "In-depth analysis, web context & vision", provider: "groq", mode: "deep" }
     ];
 
     let state = {
@@ -830,6 +831,17 @@ const HTML_PAGE = `<!DOCTYPE html>
       localStorage.setItem("tg_gpt_model", id);
       renderModelMenu();
       document.getElementById("modelMenu").classList.remove("open");
+    }
+
+
+    let useWebSearch = false;
+    function toggleWebSearch() {
+      useWebSearch = !useWebSearch;
+      const b = document.getElementById("webSearchBtn");
+      if (b) {
+        b.style.background = useWebSearch ? "rgba(56,189,248,0.22)" : "";
+        b.style.color = useWebSearch ? "#38bdf8" : "";
+      }
     }
 
     function toggleTempChat() {
@@ -1212,6 +1224,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             apiKey: state.apiKey,
             systemPrompt: state.customInst,
             fastVoice: !!isVoiceMode,
+            webSearch: useWebSearch || state.model === "qwen/qwen3.8-27b",
             lang: appLang,
             userName: (document.getElementById("userName")?.textContent || "").trim()
           }),
@@ -1833,6 +1846,32 @@ export default {
 
 
 
+
+async function fetchWebContext(query) {
+  try {
+    const q = String(query || "").slice(0, 140).trim();
+    if (!q) return "";
+    const [ddgRes, wikiRes] = await Promise.all([
+      fetch("https://api.duckduckgo.com/?q=" + encodeURIComponent(q) + "&format=json&no_html=1&skip_disambig=1", { signal: AbortSignal.timeout(2500) }).catch(() => null),
+      fetch("https://en.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(q.replace(/\s+/g, "_")), { signal: AbortSignal.timeout(2500) }).catch(() => null)
+    ]);
+    const parts = [];
+    if (ddgRes && ddgRes.ok) {
+      const d = await ddgRes.json();
+      if (d.AbstractText) parts.push("Web Summary: " + d.AbstractText);
+      if (d.RelatedTopics && d.RelatedTopics.length) {
+        const rel = d.RelatedTopics.slice(0, 3).map(t => t.Text).filter(Boolean).join(" | ");
+        if (rel) parts.push("Related: " + rel);
+      }
+    }
+    if (wikiRes && wikiRes.ok) {
+      const w = await wikiRes.json();
+      if (w.extract) parts.push("Wikipedia: " + w.extract.slice(0, 600));
+    }
+    return parts.join("\n");
+  } catch (_) { return ""; }
+}
+
 function isAmharicText(txt) {
   if (!txt) return false;
   if (/[\u1200-\u137F]/.test(txt)) return true;
@@ -1925,6 +1964,12 @@ async function handleMiniAppChat(request, env) {
     }
 
     const lastUserTxt = rawMsgs.length ? String(rawMsgs[rawMsgs.length - 1].content || "") : "";
+    if (body.webSearch && lastUserTxt && !hasImages) {
+      const webInfo = await fetchWebContext(lastUserTxt);
+      if (webInfo) {
+        messages[0].content += "\n\n[Live Web Context for accuracy]:\n" + webInfo;
+      }
+    }
     const useGeminiAm = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastUserTxt));
     if (provider === "gemini" || useGeminiAm) {
       const gKey = provider === "gemini" ? apiKey : env.GEMINI_API_KEY;
@@ -2500,7 +2545,7 @@ async function handleTelegramWebhook(request, env, origin) {
 
   const history = botMemory.get(chatId) || [];
   history.push({ role: "user", content: text });
-  if (history.length > 12) history.splice(0, history.length - 12);
+  if (history.length > 20) history.splice(0, history.length - 20);
 
   const reply = await askBotAI(env, history, fromU.first_name || "");
   history.push({ role: "assistant", content: reply });
