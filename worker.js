@@ -2212,7 +2212,9 @@ async function handleMiniAppChat(request, env) {
     const useGeminiSmart = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastUserTxt) || hasImages || model.includes("gemini"));
     if (provider === "gemini" || useGeminiSmart) {
       const gKey = provider === "gemini" ? apiKey : env.GEMINI_API_KEY;
-      return streamGemini(gKey, "gemini-3.8-flash", messages);
+      const gRes = await streamGemini(gKey, "gemini-3.8-flash", messages);
+      if (gRes.ok || provider === "gemini") return gRes;
+      // Gemini temporarily overloaded (503/429) -> seamless fallback to Groq!
     }
 
     const endpoint = provider === "openrouter"
@@ -2629,15 +2631,19 @@ async function streamGemini(apiKey, model, messages) {
       return { role: m.role === "assistant" ? "model" : "user", parts: [{ text: String(m.content || "") }] };
     });
 
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":streamGenerateContent?alt=sse&key=" + apiKey;
-  const upstream = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: sys ? { parts: [{ text: sys }] } : undefined,
-      contents
-    })
-  });
+  let upstream = null;
+  for (const mTry of [model, "gemini-2.5-flash-lite"]) {
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + mTry + ":streamGenerateContent?alt=sse&key=" + apiKey;
+    upstream = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: sys ? { parts: [{ text: sys }] } : undefined,
+        contents
+      })
+    });
+    if (upstream.ok) break;
+  }
 
   if (!upstream.ok) return new Response(await upstream.text(), { status: upstream.status });
 
