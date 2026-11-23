@@ -182,7 +182,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     .msg-row.user { align-items: flex-end; }
     .msg-bubble-user {
       background: var(--bg-user-msg); color: var(--text-primary);
-      padding: 10px 16px; border-radius: 20px; max-width: 82%;
+      padding: 10px 16px; border-radius: 20px; max-width: 82%; overflow: hidden;
       font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
     }
     .msg-user-actions { display: flex; gap: 6px; margin-top: 4px; opacity: 0.7; }
@@ -426,6 +426,21 @@ const HTML_PAGE = `<!DOCTYPE html>
     .seg-group { display: flex; gap: 8px; }
     .seg-btn { flex: 1; padding: 9px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-secondary); backdrop-filter: blur(12px); transition: all 0.15s; }
     .seg-btn.active { background: var(--accent-btn); color: var(--accent-btn-text); border-color: transparent; }
+
+    .followup-wrap { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+    .followup-chip {
+      padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 500;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      color: var(--text-secondary); cursor: pointer; transition: all 0.15s; text-align: left;
+    }
+    .followup-chip:hover { border-color: var(--brand-accent); color: var(--text-primary); background: rgba(56,189,248,0.12); }
+    .color-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+    .swatch-btn {
+      width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
+    }
+    .swatch-btn.active { border-color: #fff; transform: scale(1.12); box-shadow: 0 0 12px rgba(255,255,255,0.4); }
+    .chat-item-pin { opacity: 0.55; padding: 4px; font-size: 11px; }
+    .chat-item-pin.pinned { opacity: 1; color: #facc15; }
   </style>  </style>  </style>  </style>
 </head>
 <body>
@@ -583,6 +598,20 @@ const HTML_PAGE = `<!DOCTYPE html>
         </div>
       </div>
       <div>
+        <label class="field-label">Your Display Name (Profile)</label>
+        <input id="profileNameInput" class="field-input" type="text" placeholder="Enter your name..." />
+      </div>
+      <div>
+        <label class="field-label">Accent Color</label>
+        <div class="color-swatches">
+          <button type="button" class="swatch-btn" data-color="#10a37f" style="background:linear-gradient(135deg,#10a37f,#38bdf8);" onclick="applyAccent('#10a37f')"></button>
+          <button type="button" class="swatch-btn" data-color="#38bdf8" style="background:linear-gradient(135deg,#38bdf8,#6366f1);" onclick="applyAccent('#38bdf8')"></button>
+          <button type="button" class="swatch-btn" data-color="#a855f7" style="background:linear-gradient(135deg,#a855f7,#ec4899);" onclick="applyAccent('#a855f7')"></button>
+          <button type="button" class="swatch-btn" data-color="#f59e0b" style="background:linear-gradient(135deg,#f59e0b,#ef4444);" onclick="applyAccent('#f59e0b')"></button>
+          <button type="button" class="swatch-btn" data-color="#22c55e" style="background:linear-gradient(135deg,#22c55e,#14b8a6);" onclick="applyAccent('#22c55e')"></button>
+        </div>
+      </div>
+      <div>
         <label class="field-label">Language / ቋንቋ</label>
         <div class="seg-group">
           <button type="button" id="langEnBtn" class="seg-btn" onclick="applyLang('en')">English</button>
@@ -625,7 +654,8 @@ const HTML_PAGE = `<!DOCTYPE html>
         <input id="apiKeyInput" class="field-input" type="password" placeholder="Leave blank to use free bot key" />
       </div>
       <div style="display:flex; gap:10px; justify-content:space-between; margin-top:4px;">
-        <button class="btn-danger" onclick="clearAllChats()">Clear All Chats</button>
+        <button class="btn-danger" onclick="clearAllChats()">Clear All</button>
+        <button class="seg-btn" style="flex:0 0 auto;" onclick="exportActiveChat()">Export</button>
         <button class="btn-primary" onclick="saveSettings()">Save</button>
       </div>
     </div>
@@ -636,9 +666,10 @@ const HTML_PAGE = `<!DOCTYPE html>
     if (tg) { tg.ready(); tg.expand(); }
 
     const MODELS = [
-      { id: "openai/gpt-oss-120b", label: "Orvix Pro", desc: "Flagship 120B intelligence for coding, math & reasoning", provider: "groq", mode: "pro" },
+      { id: "openai/gpt-oss-120b", label: "Orvix Pro", desc: "Flagship 120B intelligence for coding, math & pro tasks", provider: "groq", mode: "pro" },
       { id: "openai/gpt-oss-20b", label: "Orvix Fast", desc: "Sub-second speed for everyday chat", provider: "groq", mode: "fast" },
-      { id: "qwen/qwen3.8-27b", label: "Orvix Deep Research", desc: "In-depth analysis, web context & vision", provider: "groq", mode: "deep" }
+      { id: "qwen/qwen3.8-27b", label: "Orvix Deep Research", desc: "In-depth analysis, live web search & vision", provider: "groq", mode: "deep" },
+      { id: "gemini-2.5-flash", label: "Orvix Amharic & Vision", desc: "Best for accurate Amharic & image OCR", provider: "gemini", mode: "amharic" }
     ];
 
     let state = {
@@ -680,10 +711,12 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (!MODELS.some(x => x.id === state.model)) { state.model = MODELS[0].id; localStorage.setItem("tg_gpt_model", state.model); }
       applyTheme(state.theme);
       applyDisplayPrefs();
+      applyAccent(localStorage.getItem('tg_gpt_accent') || '#10a37f');
       applyLang(appLang);
       if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         const u = tg.initDataUnsafe.user;
-        const full = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username || "User";
+        const savedName = localStorage.getItem("tg_gpt_profile_name");
+        const full = savedName || [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username || "User";
         document.getElementById("userName").textContent = full;
         if (u.username) document.getElementById("userHandle").textContent = "@" + u.username;
         const av = document.getElementById("userAvatar");
@@ -696,6 +729,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         const adminSec = document.getElementById("adminOnlySettings");
         if (adminSec) adminSec.style.display = isOwner ? "flex" : "none";
       }
+      const sn = localStorage.getItem('tg_gpt_profile_name'); if (sn) { document.getElementById('userName').textContent = sn; document.getElementById('userAvatar').textContent = sn.charAt(0).toUpperCase(); }
       renderModelMenu();
       renderSidebar();
       renderChat();
@@ -783,6 +817,48 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (sc) sc.placeholder = t.search;
       const dis = document.querySelector(".disclaimer");
       if (dis) dis.textContent = t.disclaimer;
+    }
+
+
+    function applyAccent(hex) {
+      document.documentElement.style.setProperty("--brand-accent", hex);
+      localStorage.setItem("tg_gpt_accent", hex);
+      document.querySelectorAll(".swatch-btn").forEach(b => {
+        b.classList.toggle("active", b.getAttribute("data-color") === hex);
+      });
+    }
+    function togglePinChat(e, id) {
+      e.stopPropagation();
+      const c = state.chats.find(x => x.id === id);
+      if (c) { c.pinned = !c.pinned; saveChats(); renderSidebar(); }
+    }
+    function exportActiveChat() {
+      const msgs = getActiveMessages();
+      if (!msgs.length) return;
+      const txt = msgs.map(m => (m.role === "user" ? "You: " : "Orvix AI: ") + m.content).join("\n\n---\n\n");
+      const blob = new Blob([txt], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "orvix-chat.txt";
+      a.click();
+    }
+    async function loadFollowups(msgs) {
+      const last = msgs[msgs.length - 1];
+      if (!last || last.role !== "assistant" || !last.content) return;
+      try {
+        const res = await fetch("/api/suggestions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topics: [last.content.slice(0, 260)], apiKey: state.apiKey, mode: "followup" })
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.items && data.items.length) {
+          last.followups = data.items.slice(0, 3).map(it => it.prompt || it.title).filter(Boolean);
+          if (!state.tempMode) saveChats();
+          renderChat();
+        }
+      } catch (_) {}
     }
 
     function applyTheme(t) {
@@ -875,8 +951,9 @@ const HTML_PAGE = `<!DOCTYPE html>
       const q = document.getElementById("searchChats").value.toLowerCase();
       const list = document.getElementById("sidebarList");
       const now = Date.now();
-      const groups = { Today: [], Yesterday: [], "Previous 7 Days": [], Older: [] };
+      const groups = { Pinned: [], Today: [], Yesterday: [], "Previous 7 Days": [], Older: [] };
       state.chats.filter(c => !q || c.title.toLowerCase().includes(q)).forEach(c => {
+        if (c.pinned) { groups.Pinned.push(c); return; }
         const diffDays = (now - (c.updatedAt || c.createdAt || now)) / 86400000;
         if (diffDays < 1) groups.Today.push(c);
         else if (diffDays < 2) groups.Yesterday.push(c);
@@ -890,6 +967,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         items.forEach(c => {
           html += '<div class="chat-item ' + (c.id === state.activeChatId && !state.tempMode ? 'active' : '') + '" onclick="openChat(\\'' + c.id + '\\')">' +
             '<span class="chat-item-title">' + escapeHtml(c.title) + '</span>' +
+            '<button class="chat-item-pin ' + (c.pinned ? 'pinned' : '') + '" onclick="togglePinChat(event,\\'' + c.id + '\\')" title="Pin">★</button>' +
             '<button class="chat-item-del" onclick="deleteChat(event,\\'' + c.id + '\\')" title="Delete">✕</button>' +
           '</div>';
         });
@@ -995,7 +1073,12 @@ const HTML_PAGE = `<!DOCTYPE html>
                     '<button class="msg-action-btn" onclick="copyMsg(' + idx + ', this)">Copy</button>' +
                     '<button class="msg-action-btn" onclick="speakMsg(' + idx + ')">Read aloud</button>' +
                     (idx === msgs.length - 1 ? '<button class="msg-action-btn" onclick="regenerate()">Regenerate</button>' : '') +
-                  '</div>'
+                  '</div>' +
+                  (idx === msgs.length - 1 && m.followups && m.followups.length ? (
+                    '<div class="followup-wrap">' +
+                    m.followups.map(fq => '<button class="followup-chip" onclick="useSuggestion(\\'' + escapeHtml(fq).replace(/\\x27/g, "\\\\\\x27") + '\\')">↗ ' + escapeHtml(fq) + '</button>').join('') +
+                    '</div>'
+                  ) : '')
                 ) : '') +
               '</div>' +
             '</div>' +
@@ -1271,6 +1354,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         if (!state.tempMode) saveChats();
         updateSendBtn();
         renderChat();
+        if (!isVoiceMode) loadFollowups(msgs);
       }
     }
 
@@ -1328,6 +1412,7 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     function openSettings() {
       document.getElementById("customInstInput").value = state.customInst;
+      document.getElementById("profileNameInput").value = localStorage.getItem("tg_gpt_profile_name") || document.getElementById("userName").textContent || "";
       document.getElementById("providerSelect").value = state.provider;
       document.getElementById("apiKeyInput").value = state.apiKey;
       document.getElementById("settingsModal").classList.add("open");
@@ -1338,6 +1423,8 @@ const HTML_PAGE = `<!DOCTYPE html>
       state.provider = document.getElementById("providerSelect").value;
       state.apiKey = document.getElementById("apiKeyInput").value.trim();
       localStorage.setItem("tg_gpt_inst", state.customInst);
+      const pn = document.getElementById("profileNameInput").value.trim();
+      if (pn) { localStorage.setItem("tg_gpt_profile_name", pn); document.getElementById("userName").textContent = pn; }
       localStorage.setItem("tg_gpt_provider", state.provider);
       localStorage.setItem("tg_gpt_apikey", state.apiKey);
       renderChat();
@@ -1970,10 +2057,10 @@ async function handleMiniAppChat(request, env) {
         messages[0].content += "\n\n[Live Web Context for accuracy]:\n" + webInfo;
       }
     }
-    const useGeminiAm = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastUserTxt));
-    if (provider === "gemini" || useGeminiAm) {
+    const useGeminiSmart = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastUserTxt) || hasImages || model.includes("gemini"));
+    if (provider === "gemini" || useGeminiSmart) {
       const gKey = provider === "gemini" ? apiKey : env.GEMINI_API_KEY;
-      return streamGemini(gKey, model.includes("gemini") ? model : "gemini-2.5-flash", messages);
+      return streamGemini(gKey, "gemini-2.5-flash", messages);
     }
 
     const endpoint = provider === "openrouter"
@@ -2373,7 +2460,21 @@ async function streamGemini(apiKey, model, messages) {
   const sys = messages.find(m => m.role === "system")?.content || "";
   const contents = messages
     .filter(m => m.role !== "system")
-    .map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+    .map(m => {
+      if (Array.isArray(m.content)) {
+        const parts = m.content.map(c => {
+          if (c.type === "image_url" && c.image_url?.url) {
+            const urlStr = c.image_url.url;
+            const b64 = urlStr.split(",")[1] || "";
+            const mime = (urlStr.match(/^data:([^;]+);/) || [])[1] || "image/jpeg";
+            return { inlineData: { mimeType: mime, data: b64 } };
+          }
+          return { text: c.text || "" };
+        });
+        return { role: m.role === "assistant" ? "model" : "user", parts };
+      }
+      return { role: m.role === "assistant" ? "model" : "user", parts: [{ text: String(m.content || "") }] };
+    });
 
   const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":streamGenerateContent?alt=sse&key=" + apiKey;
   const upstream = await fetch(url, {
