@@ -1,0 +1,2656 @@
+// Telegram Bot + ChatGPT-style Mini App (Single-File Cloudflare Worker)
+// 100% Free Deployment on Cloudflare Workers — Mobile-Only Setup Ready
+
+const HTML_PAGE = `<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Orvix AI</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <meta name="theme-color" content="#070b12" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
+  <style>
+    :root {
+      --bg-main: #212121;
+      --bg-sidebar: #171717;
+      --bg-composer: #2f2f2f;
+      --bg-user-msg: #2f2f2f;
+      --bg-hover: #2a2a2a;
+      --bg-card: #2a2a2a;
+      --border-subtle: rgba(255, 255, 255, 0.1);
+      --text-primary: #ececec;
+      --text-secondary: #b4b4b4;
+      --text-muted: #8e8e8e;
+      --accent-btn: #ffffff;
+      --accent-btn-text: #000000;
+      --code-bg: #0d0d0d;
+      --code-header: #2f2f2f;
+      --danger: #ef4444;
+    }
+    html.light {
+      --bg-main: #ffffff;
+      --bg-sidebar: #f9f9f9;
+      --bg-composer: #f4f4f4;
+      --bg-user-msg: #f4f4f4;
+      --bg-hover: #ececec;
+      --bg-card: #f4f4f4;
+      --border-subtle: rgba(0, 0, 0, 0.1);
+      --text-primary: #0d0d0d;
+      --text-secondary: #5d5d5d;
+      --text-muted: #8e8e8e;
+      --accent-btn: #000000;
+      --accent-btn-text: #ffffff;
+      --code-bg: #1e1e1e;
+      --code-header: #2d2d2d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-primary);
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+    }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+    input, textarea, select { font-family: inherit; color: inherit; }
+
+    /* Sidebar */
+    .sidebar-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+    }
+    .sidebar-overlay.open { opacity: 1; pointer-events: auto; }
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 270px; max-width: 82vw;
+      background: var(--bg-sidebar); z-index: 50;
+      transform: translateX(-100%); transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex; flex-direction: column; border-right: 1px solid var(--border-subtle);
+      padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+    }
+    .sidebar.open { transform: translateX(0); }
+    @media (min-width: 768px) {
+      .sidebar { position: relative; transform: none; flex-shrink: 0; }
+      .sidebar.collapsed { display: none; }
+      .sidebar-overlay { display: none !important; }
+    }
+    .sidebar-top { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .sidebar-actions { display: flex; align-items: center; justify-content: space-between; }
+    .icon-btn {
+      width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      color: var(--text-secondary); transition: background 0.15s;
+    }
+    .icon-btn:hover, .icon-btn:active { background: var(--bg-hover); color: var(--text-primary); }
+    .search-box {
+      width: 100%; background: var(--bg-composer); border: 1px solid var(--border-subtle);
+      border-radius: 10px; padding: 8px 12px; font-size: 13px; outline: none;
+    }
+    .sidebar-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
+    .group-label {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      padding: 12px 10px 6px; text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .chat-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 10px; border-radius: 8px; font-size: 14px; color: var(--text-primary);
+      cursor: pointer; transition: background 0.12s; gap: 6px;
+    }
+    .chat-item:hover, .chat-item.active { background: var(--bg-hover); }
+    .chat-item-title {
+      flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .chat-item-del {
+      opacity: 0.6; padding: 4px; border-radius: 4px; font-size: 12px;
+    }
+    .chat-item-del:hover { opacity: 1; color: var(--danger); }
+    .sidebar-footer {
+      padding: 10px 12px; border-top: 1px solid var(--border-subtle);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .user-pill { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%; background: #10a37f; color: #fff;
+      font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .user-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Main Area */
+    .main { flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100dvh; position: relative; }
+    .topbar {
+      height: 52px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0; padding-top: env(safe-area-inset-top);
+    }
+    .topbar-left { display: flex; align-items: center; gap: 4px; }
+    .model-dropdown-wrap { position: relative; }
+    .model-btn {
+      display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 10px;
+      font-size: 16px; font-weight: 600; color: var(--text-primary);
+    }
+    .model-btn:hover { background: var(--bg-hover); }
+    .model-menu {
+      position: absolute; top: 100%; left: 0; margin-top: 4px; width: 260px;
+      background: var(--bg-composer); border: 1px solid var(--border-subtle); border-radius: 14px;
+      padding: 6px; z-index: 60; box-shadow: 0 10px 30px rgba(0,0,0,0.35); display: none;
+    }
+    .model-menu.open { display: block; }
+    .model-option {
+      width: 100%; text-align: left; padding: 10px 12px; border-radius: 10px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .model-option:hover, .model-option.selected { background: var(--bg-hover); }
+    .model-option-name { font-size: 14px; font-weight: 600; }
+    .model-option-desc { font-size: 12px; color: var(--text-secondary); }
+    .topbar-right { display: flex; align-items: center; gap: 4px; }
+    .temp-badge.active { color: #10a37f; background: rgba(16, 163, 127, 0.15); }
+
+    /* Messages */
+    .chat-scroll {
+      flex: 1; overflow-y: auto; padding: 12px 16px 24px;
+      display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth;
+    }
+    .chat-container { width: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 24px 16px; gap: 20px; max-width: 680px; margin: 0 auto; width: 100%;
+    }
+    .gpt-logo {
+      width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border-subtle);
+      display: flex; align-items: center; justify-content: center; background: var(--bg-composer);
+    }
+    .empty-title { font-size: 24px; font-weight: 600; }
+    .suggestions {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; max-width: 540px;
+    }
+    @media (max-width: 500px) { .suggestions { grid-template-columns: 1fr; } }
+    .suggestion-card {
+      text-align: left; padding: 12px 14px; border-radius: 14px;
+      border: 1px solid var(--border-subtle); background: transparent;
+      transition: background 0.15s;
+    }
+    .suggestion-card:hover { background: var(--bg-hover); }
+    .suggestion-card strong { display: block; font-size: 13px; margin-bottom: 2px; }
+    .suggestion-card span { font-size: 12px; color: var(--text-secondary); }
+
+    .msg-row { display: flex; flex-direction: column; width: 100%; }
+    .msg-row.user { align-items: flex-end; }
+    .msg-bubble-user {
+      background: var(--bg-user-msg); color: var(--text-primary);
+      padding: 10px 16px; border-radius: 20px; max-width: 82%;
+      font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    }
+    .msg-user-actions { display: flex; gap: 6px; margin-top: 4px; opacity: 0.7; }
+    .msg-assistant-wrap { display: flex; gap: 12px; align-items: flex-start; width: 100%; }
+    .assistant-avatar {
+      width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-subtle);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;
+      background: var(--bg-main);
+    }
+    .assistant-content { flex: 1; min-width: 0; font-size: 15px; line-height: 1.65; }
+    .assistant-content p { margin-bottom: 12px; }
+    .assistant-content p:last-child { margin-bottom: 0; }
+    .assistant-content ul, .assistant-content ol { margin: 8px 0 12px 22px; }
+    .assistant-content li { margin-bottom: 4px; }
+    .assistant-content h1, .assistant-content h2, .assistant-content h3 { margin: 16px 0 8px; font-weight: 600; }
+    .assistant-content table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; overflow-x: auto; display: block; }
+    .assistant-content th, .assistant-content td { border: 1px solid var(--border-subtle); padding: 8px 10px; text-align: left; }
+    .assistant-content th { background: var(--bg-composer); }
+    .assistant-content blockquote { border-left: 3px solid var(--text-muted); padding-left: 12px; color: var(--text-secondary); margin: 10px 0; }
+    .assistant-content code:not(pre code) {
+      background: var(--bg-composer); padding: 2px 6px; border-radius: 5px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .code-block-wrap { margin: 12px 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--border-subtle); background: var(--code-bg); }
+    .code-block-header {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--code-header); padding: 6px 12px; font-size: 12px; color: #d4d4d4;
+    }
+    .copy-code-btn { font-size: 12px; color: #d4d4d4; display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; }
+    .copy-code-btn:hover { background: rgba(255,255,255,0.1); }
+    .code-block-wrap pre { padding: 12px; overflow-x: auto; font-size: 13px; line-height: 1.45; }
+    .msg-actions { display: flex; align-items: center; gap: 4px; margin-top: 8px; color: var(--text-muted); }
+    .msg-action-btn {
+      padding: 5px 7px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 4px;
+    }
+    .msg-action-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    /* Composer */
+    .composer-area {
+      padding: 6px 12px calc(10px + env(safe-area-inset-bottom));
+      max-width: 780px; width: 100%; margin: 0 auto; flex-shrink: 0;
+    }
+    .attachment-preview {
+      display: none; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; padding: 0 4px;
+    }
+    .attachment-preview.has-items { display: flex; }
+    .att-chip {
+      display: flex; align-items: center; gap: 6px; background: var(--bg-composer);
+      border: 1px solid var(--border-subtle); border-radius: 10px; padding: 6px 10px; font-size: 12px;
+    }
+    .att-chip img { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; }
+    .composer-box {
+      background: var(--bg-composer); border-radius: 26px; padding: 8px 10px;
+      display: flex; align-items: flex-end; gap: 6px; border: 1px solid var(--border-subtle);
+    }
+    .composer-input {
+      flex: 1; background: transparent; border: none; outline: none; resize: none;
+      font-size: 15px; line-height: 1.45; max-height: 160px; padding: 6px 4px;
+    }
+    .send-btn {
+      width: 34px; height: 34px; border-radius: 50%; background: var(--accent-btn);
+      color: var(--accent-btn-text); display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: opacity 0.15s;
+    }
+    .send-btn:disabled { opacity: 0.35; cursor: default; }
+    .mic-btn.recording { color: var(--danger); animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .disclaimer { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 80;
+      display: none; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--bg-sidebar); border: 1px solid var(--border-subtle); border-radius: 18px;
+      width: 100%; max-width: 460px; max-height: 85dvh; overflow-y: auto; padding: 20px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 600; }
+    .field-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; display: block; }
+    .field-input, .field-select, .field-textarea {
+      width: 100%; background: var(--bg-composer); border: 1px solid var(--border-subtle);
+      border-radius: 10px; padding: 9px 12px; font-size: 14px; outline: none;
+    }
+    .field-textarea { min-height: 76px; resize: vertical; }
+    .btn-primary {
+      background: var(--accent-btn); color: var(--accent-btn-text); padding: 10px 16px;
+      border-radius: 10px; font-weight: 600; font-size: 14px;
+    }
+    .btn-danger {
+      background: rgba(239,68,68,0.15); color: var(--danger); padding: 10px 16px;
+      border-radius: 10px; font-weight: 600; font-size: 14px;
+    }
+    .typing-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-primary); animation: pulse 1s infinite; margin-left: 4px;
+    }
+
+    /* Voice Conversation Mode Overlay (ChatGPT / Gemini Live Style) */
+    .voice-overlay {
+      position: fixed; inset: 0; z-index: 90;
+      background: radial-gradient(circle at 50% 45%, #0c192c 0%, #05080f 70%, #020306 100%);
+      color: #f8fafc;
+      display: none; flex-direction: column; align-items: center; justify-content: space-between;
+      padding: calc(18px + env(safe-area-inset-top)) 20px calc(32px + env(safe-area-inset-bottom));
+    }
+    .voice-overlay.open { display: flex; }
+    .voice-top { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .voice-status-badge {
+      font-size: 12px; font-weight: 600; color: #e2e8f0;
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+      padding: 6px 12px; border-radius: 999px; backdrop-filter: blur(14px);
+    }
+    .voice-center {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 28px; width: 100%; max-width: 400px; text-align: center;
+    }
+    .orb-stage {
+      position: relative; width: 240px; height: 240px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .orb-halo {
+      position: absolute; inset: 12px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(56,189,248,0.35), rgba(99,102,241,0.15) 55%, transparent 72%);
+      filter: blur(18px); transition: transform 0.1s ease-out, opacity 0.2s ease;
+      pointer-events: none;
+    }
+    .voice-orb {
+      width: 174px; height: 174px; border-radius: 50%; position: relative; cursor: pointer;
+      background:
+        radial-gradient(circle at 30% 28%, rgba(255,255,255,0.96) 0%, rgba(186,230,253,0.9) 22%, rgba(56,189,248,0.92) 52%, rgba(37,99,235,0.95) 82%, rgba(30,58,138,1) 100%);
+      box-shadow: 0 0 65px rgba(56, 189, 248, 0.45), inset 0 -18px 36px rgba(15,23,42,0.45), inset 0 12px 28px rgba(255,255,255,0.55);
+      transition: transform 0.09s ease-out, border-radius 0.4s ease, box-shadow 0.25s ease;
+    }
+    .voice-orb.listening { animation: liveBreathe 3.2s infinite ease-in-out; }
+    .voice-orb.thinking {
+      background:
+        radial-gradient(circle at 32% 28%, #ffffff 0%, #c7d2fe 28%, #818cf8 60%, #4338ca 100%);
+      box-shadow: 0 0 80px rgba(129, 140, 248, 0.65), inset 0 10px 24px rgba(255,255,255,0.5);
+      animation: liveMorph 1.3s infinite ease-in-out;
+    }
+    .voice-orb.speaking {
+      background:
+        radial-gradient(circle at 32% 28%, #ffffff 0%, #bae6fd 24%, #38bdf8 55%, #0284c7 85%, #0369a1 100%);
+      box-shadow: 0 0 95px rgba(56, 189, 248, 0.8), inset 0 12px 26px rgba(255,255,255,0.6);
+      animation: liveSpeak 0.55s infinite alternate ease-in-out;
+    }
+    @keyframes liveBreathe {
+      0%,100% { transform: scale(1); border-radius: 50%; }
+      50% { transform: scale(1.045); border-radius: 48% 52% 51% 49% / 50% 48% 52% 50%; }
+    }
+    @keyframes liveMorph {
+      0% { transform: scale(0.96) rotate(0deg); border-radius: 46% 54% 52% 48% / 52% 46% 54% 48%; }
+      50% { transform: scale(1.05) rotate(180deg); border-radius: 54% 46% 48% 52% / 48% 54% 46% 52%; }
+      100% { transform: scale(0.96) rotate(360deg); border-radius: 46% 54% 52% 48% / 52% 46% 54% 48%; }
+    }
+    @keyframes liveSpeak {
+      0% { transform: scale(0.99); border-radius: 50%; }
+      100% { transform: scale(1.11); border-radius: 47% 53% 49% 51% / 52% 48% 52% 48%; }
+    }
+    .voice-caption {
+      font-size: 17px; line-height: 1.5; color: rgba(248,250,252,0.9);
+      min-height: 52px; max-height: 130px; overflow-y: auto; padding: 0 16px;
+      font-weight: 400; letter-spacing: -0.01em; transition: opacity 0.2s ease;
+    }
+    .voice-caption.hidden { opacity: 0; pointer-events: none; }
+    .live-hint { font-size: 12px; color: rgba(148,163,184,0.75); letter-spacing: 0.02em; }
+    .voice-fallback-row { width: 100%; max-width: 380px; display: none; gap: 8px; margin-bottom: 14px; }
+    .voice-fallback-row.open { display: flex; }
+    .voice-controls { display: flex; align-items: center; gap: 18px; }
+    .voice-ctrl-btn {
+      width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.09);
+      border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;
+      color: #f8fafc; font-size: 19px; backdrop-filter: blur(14px); transition: background 0.15s, transform 0.1s;
+    }
+    .voice-ctrl-btn:active { transform: scale(0.93); }
+    .voice-ctrl-btn.end { background: #ef4444; color: #fff; border-color: transparent; width: 62px; height: 62px; }
+    .voice-ctrl-btn.muted { background: rgba(239, 68, 68, 0.28); color: #fca5a5; }
+    .voice-ctrl-btn.on { background: rgba(56, 189, 248, 0.24); border-color: rgba(56, 189, 248, 0.45); color: #7dd3fc; }
+
+    .composer-box {
+      box-shadow: 0 0 24px rgba(56, 189, 248, 0.22), 0 0 48px rgba(139, 92, 246, 0.14), 0 8px 30px rgba(0, 0, 0, 0.25) !important;
+      border: 1px solid rgba(125, 211, 252, 0.35) !important;
+      transition: box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+    .composer-box:focus-within {
+      box-shadow: 0 0 32px rgba(56, 189, 248, 0.42), 0 0 60px rgba(16, 163, 127, 0.24) !important;
+      border-color: rgba(56, 189, 248, 0.65) !important;
+    }
+
+    /* Pro Launch Splash Screen */
+    .splash-screen {
+      position: fixed; inset: 0; z-index: 120;
+      background: radial-gradient(circle at 50% 40%, #102536 0%, #0b0f14 70%, #07090d 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .splash-screen.hide { opacity: 0; transform: scale(1.04); pointer-events: none; }
+    .splash-ring {
+      width: 96px; height: 96px; border-radius: 50%; padding: 4px;
+      background: conic-gradient(from 0deg, #38bdf8, #10a37f, #818cf8, #38bdf8);
+      box-shadow: 0 0 50px rgba(56, 189, 248, 0.45);
+      animation: splashPop 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .splash-inner {
+      width: 100%; height: 100%; border-radius: 50%; overflow: hidden; background: #0b0f14;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .splash-inner img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+    .splash-title {
+      font-size: 24px; font-weight: 700; letter-spacing: 0.02em; color: #f8fafc;
+      opacity: 0; animation: splashFadeUp 0.55s 0.2s ease forwards;
+    }
+    .splash-bar {
+      width: 120px; height: 3px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden;
+      opacity: 0; animation: splashFadeUp 0.5s 0.3s ease forwards;
+    }
+    .splash-bar-fill {
+      width: 45%; height: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, #10a37f, #38bdf8);
+      animation: splashSlide 1.1s infinite ease-in-out;
+    }
+    @keyframes splashPop { 0% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
+    @keyframes splashFadeUp { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes splashSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+
+    .gpt-logo { width: 72px !important; height: 72px !important; flex-shrink: 0; border-radius: 50%; overflow: hidden; }
+    .gpt-logo img { width: 72px !important; height: 72px !important; object-fit: cover; border-radius: 50%; display: block; }
+    .analysing-pill { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border); font-size: 13px; font-weight: 500; color: var(--text-secondary); backdrop-filter: blur(12px); }
+    .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+    .user-meta { display: flex; flex-direction: column; min-width: 0; }
+    .user-handle { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .about-creator { padding: 10px 12px 12px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    .about-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .about-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .about-link { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); text-decoration: none; font-size: 12px; font-weight: 500; }
+    .sidebar, .model-menu, .modal { background: rgba(20, 24, 32, 0.78) !important; backdrop-filter: blur(22px) !important; -webkit-backdrop-filter: blur(22px) !important; border-color: var(--glass-border) !important; }
+    html.light .sidebar, html.light .model-menu, html.light .modal { background: rgba(255, 255, 255, 0.78) !important; }
+    .seg-group { display: flex; gap: 8px; }
+    .seg-btn { flex: 1; padding: 9px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-secondary); backdrop-filter: blur(12px); transition: all 0.15s; }
+    .seg-btn.active { background: var(--accent-btn); color: var(--accent-btn-text); border-color: transparent; }
+  </style>  </style>  </style>  </style>
+</head>
+<body>
+  <div id="splashScreen" class="splash-screen">
+    <div class="splash-ring">
+      <div class="splash-inner">
+        <img src="/logo.png" alt="Orvix AI" onerror="this.style.display='none'"/>
+      </div>
+    </div>
+    <div class="splash-title">Orvix AI</div>
+    <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+  </div>
+  <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-actions">
+        <button class="icon-btn" onclick="toggleSidebar(false)" title="Close sidebar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+        </button>
+        <button class="icon-btn" onclick="newChat()" title="New chat">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+      </div>
+      <input id="searchChats" class="search-box" type="text" placeholder="Search chats..." oninput="renderSidebar()" />
+    </div>
+    <div id="sidebarList" class="sidebar-list"></div>
+    <div class="sidebar-footer">
+      <div class="user-pill">
+        <div id="userAvatar" class="avatar">U</div>
+        <div class="user-meta">
+          <div id="userName" class="user-name">User</div>
+          <div id="userHandle" class="user-handle"></div>
+        </div>
+      </div>
+      <button class="icon-btn" onclick="openSettings()" title="Settings">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+      </button>
+    </div>
+    <div class="about-creator">
+      <div class="about-title">About • Bereket Tesfaye</div>
+      <div class="about-links">
+        <a class="about-link" href="tel:0960934894">📞 0960934894</a>
+        <a class="about-link" href="https://t.me/orvix16" onclick="if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.openTelegramLink('https://t.me/orvix16');return false;}">✈️ @orvix16</a>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn" onclick="toggleSidebar()" title="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="model-dropdown-wrap">
+          <button class="model-btn" onclick="toggleModelMenu(event)">
+            <span id="activeModelLabel">ChatGPT 4o</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="modelMenu" class="model-menu"></div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button id="installAppBtn" class="icon-btn" style="display:none; width:auto; padding:0 10px; font-size:12px; font-weight:600; background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.35);" onclick="installPWA()" title="Install Orvix AI App">📲 Install</button>
+        <button id="tempChatBtn" class="icon-btn temp-badge" onclick="toggleTempChat()" title="Temporary Chat">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"><circle cx="12" cy="12" r="9"/></svg>
+        </button>
+        <button class="icon-btn" onclick="newChat()" title="New Chat">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="chatScroll" class="chat-scroll"></div>
+
+    <div class="composer-area">
+      <div id="attachmentPreview" class="attachment-preview"></div>
+      <div class="composer-box">
+        <input id="fileInput" type="file" hidden accept="image/*,.txt,.md,.js,.py,.json,.csv,.html,.css" onchange="handleFiles(this.files)" />
+        <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Attach file or image">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <textarea id="promptInput" class="composer-input" rows="1" placeholder="Message Orvix AI" oninput="autoResize(this); updateSendBtn();" onkeydown="handleKey(event)"></textarea>
+        <button id="webSearchBtn" class="icon-btn" onclick="toggleWebSearch()" title="Web Search">🌐</button>
+        <button id="micBtn" class="icon-btn mic-btn" onclick="toggleVoice()" title="Voice input">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        </button>
+        <button id="voiceModeBtn" class="icon-btn" onclick="openVoiceMode()" title="Voice conversation">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M4 10v4"/><path d="M20 10v4"/></svg>
+        </button>
+        <button id="sendBtn" class="send-btn" onclick="onSendOrStop()" disabled title="Send">
+          <svg id="sendIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+      </div>
+      <div class="disclaimer">Orvix AI • Built by Bereket • Check important info.</div>
+    </div>
+  </main>
+
+  <div id="voiceOverlay" class="voice-overlay">
+    <div class="voice-top">
+      <span id="voiceStatusBadge" class="voice-status-badge">Voice Conversation</span>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <button type="button" id="vPickFemale" class="voice-status-badge" style="cursor:pointer;" onclick="setVoicePreset('female')">👩 Female</button>
+        <button type="button" id="vPickMale" class="voice-status-badge" style="cursor:pointer;" onclick="setVoicePreset('male')">👨 Male</button>
+        <button type="button" id="vPickKids" class="voice-status-badge" style="cursor:pointer;" onclick="setVoicePreset('kids')">🧒 Kids</button>
+        <button class="icon-btn" onclick="closeVoiceMode()" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="voice-center">
+      <div class="orb-stage">
+        <div id="orbHalo" class="orb-halo"></div>
+        <div id="voiceOrb" class="voice-orb listening" onclick="onOrbTap()"></div>
+      </div>
+      <div id="voiceCaption" class="voice-caption">Listening...</div>
+      <div id="liveHint" class="live-hint">Speak naturally • Tap orb to interrupt</div>
+    </div>
+    <div id="voiceFallbackRow" class="voice-fallback-row">
+      <input id="voiceFallbackInput" class="field-input" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.18);" type="text" placeholder="Type to Orvix..." onkeydown="if(event.key==='Enter') sendVoiceFallback()" />
+      <button class="btn-primary" style="background:#38bdf8;color:#082f49;" onclick="sendVoiceFallback()">Send</button>
+    </div>
+    <div class="voice-controls">
+      <button id="voiceMuteBtn" class="voice-ctrl-btn" onclick="toggleVoiceMute()" title="Mute/Unmute">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+      </button>
+      <button id="voiceCcBtn" class="voice-ctrl-btn on" onclick="toggleVoiceCaptions()" title="Toggle Captions">CC</button>
+      <button class="voice-ctrl-btn" onclick="document.getElementById('voiceFallbackRow').classList.toggle('open')" title="Type message">⌨️</button>
+      <button class="voice-ctrl-btn end" onclick="closeVoiceMode()" title="End Call">✕</button>
+    </div>
+  </div>
+
+  <div id="confirmModal" class="modal-backdrop" onclick="if(event.target===this) closeConfirm()">
+    <div class="modal" style="max-width:340px;">
+      <div class="modal-header">
+        <span id="confirmTitle">Delete Chat?</span>
+        <button class="icon-btn" onclick="closeConfirm()">✕</button>
+      </div>
+      <div id="confirmMsg" style="font-size:14px; color:var(--text-secondary); line-height:1.5;">Are you sure you want to delete this conversation?</div>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">
+        <button class="seg-btn" style="flex:0 0 auto; padding:9px 16px;" onclick="closeConfirm()">Cancel</button>
+        <button class="btn-danger" onclick="runConfirmAction()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal-backdrop" onclick="if(event.target===this) closeSettings()">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Settings &amp; Custom Instructions</span>
+        <button class="icon-btn" onclick="closeSettings()">✕</button>
+      </div>
+      <div>
+        <label class="field-label">Theme</label>
+        <div class="seg-group">
+          <button type="button" id="themeDarkBtn" class="seg-btn" onclick="applyTheme('dark')">Dark (Orvix)</button>
+          <button type="button" id="themeLightBtn" class="seg-btn" onclick="applyTheme('light')">Light</button>
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Language / ቋንቋ</label>
+        <div class="seg-group">
+          <button type="button" id="langEnBtn" class="seg-btn" onclick="applyLang('en')">English</button>
+          <button type="button" id="langAmBtn" class="seg-btn" onclick="applyLang('am')">አማርኛ</button>
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Text Size (<span id="fontSizeVal">15</span>px)</label>
+        <input id="fontSizeRange" type="range" min="12" max="22" value="15" style="width:100%;" oninput="applyFontSize(this.value)" />
+      </div>
+      <div>
+        <label class="field-label">Brightness (<span id="brightnessVal">100</span>%)</label>
+        <input id="brightnessRange" type="range" min="60" max="125" value="100" style="width:100%;" oninput="applyBrightness(this.value)" />
+      </div>
+      <div id="adminOnlySettings" style="display:none; flex-direction:column; gap:12px;">
+        <div>
+          <label class="field-label">App Logo (Owner Only — or upload logo.png to GitHub)</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input id="logoUrlInput" class="field-input" type="text" placeholder="https://... or upload below" />
+            <input id="logoFileInput" type="file" accept="image/*" hidden onchange="uploadLogoFile(this.files[0])" />
+            <button class="btn-primary" type="button" onclick="document.getElementById('logoFileInput').click()" style="white-space:nowrap;">Upload</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Custom Instructions (System Prompt)</label>
+        <textarea id="customInstInput" class="field-textarea" placeholder="What would you like Orvix AI to know about you or how should it respond?"></textarea>
+      </div>
+      <div>
+        <label class="field-label">AI Provider Override (Optional — uses Bot default if blank)</label>
+        <select id="providerSelect" class="field-select">
+          <option value="">Use Bot Server Default</option>
+          <option value="groq">Groq (Free Tier)</option>
+          <option value="gemini">Google Gemini (Free Tier)</option>
+          <option value="openrouter">OpenRouter (:free models)</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Custom API Key (Optional, saved only on your device)</label>
+        <input id="apiKeyInput" class="field-input" type="password" placeholder="Leave blank to use free bot key" />
+      </div>
+      <div style="display:flex; gap:10px; justify-content:space-between; margin-top:4px;">
+        <button class="btn-danger" onclick="clearAllChats()">Clear All Chats</button>
+        <button class="btn-primary" onclick="saveSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (tg) { tg.ready(); tg.expand(); }
+
+    const MODELS = [
+      { id: "openai/gpt-oss-120b", label: "Orvix Pro", desc: "Flagship 120B intelligence for coding, math & reasoning", provider: "groq", mode: "pro" },
+      { id: "openai/gpt-oss-20b", label: "Orvix Fast", desc: "Sub-second speed for everyday chat", provider: "groq", mode: "fast" },
+      { id: "qwen/qwen3.8-27b", label: "Orvix Deep Research", desc: "In-depth analysis, web context & vision", provider: "groq", mode: "deep" }
+    ];
+
+    let state = {
+      chats: JSON.parse(localStorage.getItem("tg_gpt_chats") || "[]"),
+      activeChatId: null,
+      tempMode: false,
+      tempMessages: [],
+      model: localStorage.getItem("tg_gpt_model") || MODELS[0].id,
+      theme: localStorage.getItem("tg_gpt_theme") || "dark",
+      customInst: localStorage.getItem("tg_gpt_inst") || "",
+      provider: localStorage.getItem("tg_gpt_provider") || "",
+      apiKey: localStorage.getItem("tg_gpt_apikey") || "",
+      attachments: [],
+      isGenerating: false,
+      abortCtrl: null
+    };
+
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+    let deferredInstallPrompt = null;
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      const btn = document.getElementById("installAppBtn");
+      if (btn && !(tg && tg.initData)) btn.style.display = "flex";
+    });
+    async function installPWA() {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      const btn = document.getElementById("installAppBtn");
+      if (btn) btn.style.display = "none";
+    }
+
+    function init() {
+      if (!MODELS.some(x => x.id === state.model)) { state.model = MODELS[0].id; localStorage.setItem("tg_gpt_model", state.model); }
+      applyTheme(state.theme);
+      applyDisplayPrefs();
+      applyLang(appLang);
+      if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+        const u = tg.initDataUnsafe.user;
+        const full = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username || "User";
+        document.getElementById("userName").textContent = full;
+        if (u.username) document.getElementById("userHandle").textContent = "@" + u.username;
+        const av = document.getElementById("userAvatar");
+        if (u.photo_url) {
+          av.innerHTML = '<img src="' + escapeHtml(u.photo_url) + '" alt=""/>';
+        } else {
+          av.textContent = full.charAt(0).toUpperCase();
+        }
+        const isOwner = (u.username || "").toLowerCase() === "orvix16";
+        const adminSec = document.getElementById("adminOnlySettings");
+        if (adminSec) adminSec.style.display = isOwner ? "flex" : "none";
+      }
+      renderModelMenu();
+      renderSidebar();
+      renderChat();
+      refreshSmartSuggestions();
+      setTimeout(() => {
+        const sp = document.getElementById("splashScreen");
+        if (sp) { sp.classList.add("hide"); setTimeout(() => { sp.style.display = "none"; }, 480); }
+      }, 1200);
+    }
+
+
+    function getLogoHtml(sz) {
+      const custom = "/logo.png";
+      return '<img src="' + escapeHtml(custom) + '" alt="Orvix AI" style="width:72px;height:72px;max-width:72px;max-height:72px;border-radius:50%;object-fit:cover;display:block;" data-sz="' + sz + '" onerror="fallbackLogo(this)"/>';
+    }
+    function fallbackLogo(img) {
+      const sz = img.getAttribute("data-sz") || 28;
+      img.outerHTML = '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5"/></svg>';
+    }
+    function applyFontSize(val) {
+      document.documentElement.style.setProperty("--chat-font-size", val + "px");
+      localStorage.setItem("tg_gpt_fontsize", val);
+      const el = document.getElementById("fontSizeVal");
+      if (el) el.textContent = val;
+    }
+    function applyBrightness(val) {
+      document.documentElement.style.setProperty("--app-brightness", (val / 100).toFixed(2));
+      localStorage.setItem("tg_gpt_brightness", val);
+      const el = document.getElementById("brightnessVal");
+      if (el) el.textContent = val;
+    }
+    function uploadLogoFile(file) {
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = () => {
+        document.getElementById("logoUrlInput").value = r.result;
+      };
+      r.readAsDataURL(file);
+    }
+    function applyDisplayPrefs() {
+      const fs = localStorage.getItem("tg_gpt_fontsize") || "15";
+      const br = localStorage.getItem("tg_gpt_brightness") || "100";
+      applyFontSize(fs);
+      applyBrightness(br);
+      const fsR = document.getElementById("fontSizeRange");
+      const brR = document.getElementById("brightnessRange");
+      if (fsR) fsR.value = fs;
+      if (brR) brR.value = br;
+    }
+
+
+    let appLang = localStorage.getItem("tg_gpt_lang") || "en";
+    const I18N = {
+      en: {
+        placeholder: "Message Orvix AI",
+        search: "Search chats...",
+        listening: "Listening...",
+        hint: "Speak naturally • Tap orb to interrupt",
+        disclaimer: "Orvix AI • Built by Bereket • Check important info.",
+        temp: "Temporary Chat",
+        emptyTitle: "Orvix AI"
+      },
+      am: {
+        placeholder: "ለ Orvix AI መልዕክት ይጻፉ...",
+        search: "ቻቶችን ይፈልጉ...",
+        listening: "እያዳመጠ ነው...",
+        hint: "በተፈጥሮ ይናገሩ • ለማስቆም ክቡን ይንኩ",
+        disclaimer: "Orvix AI • በበረከት የተሰራ • አስፈላጊ መረጃን ያረጋግጡ።",
+        temp: "ጊዜያዊ ቻት",
+        emptyTitle: "Orvix AI"
+      }
+    };
+
+    function applyLang(l) {
+      appLang = l === "am" ? "am" : "en";
+      localStorage.setItem("tg_gpt_lang", appLang);
+      const eb = document.getElementById("langEnBtn");
+      const ab = document.getElementById("langAmBtn");
+      if (eb) eb.classList.toggle("active", appLang === "en");
+      if (ab) ab.classList.toggle("active", appLang === "am");
+      const t = I18N[appLang];
+      const pi = document.getElementById("promptInput");
+      if (pi) pi.placeholder = t.placeholder;
+      const sc = document.getElementById("searchChats");
+      if (sc) sc.placeholder = t.search;
+      const dis = document.querySelector(".disclaimer");
+      if (dis) dis.textContent = t.disclaimer;
+    }
+
+    function applyTheme(t) {
+      state.theme = t;
+      localStorage.setItem("tg_gpt_theme", t);
+      document.documentElement.classList.toggle("light", t === "light");
+      const db = document.getElementById("themeDarkBtn");
+      const lb = document.getElementById("themeLightBtn");
+      if (db) db.classList.toggle("active", t !== "light");
+      if (lb) lb.classList.toggle("active", t === "light");
+    }
+
+    function toggleSidebar(force) {
+      const sb = document.getElementById("sidebar");
+      const ov = document.getElementById("sidebarOverlay");
+      const isDesktop = window.innerWidth >= 768;
+      if (isDesktop) {
+        sb.classList.toggle("collapsed", force === false ? true : undefined);
+      } else {
+        const open = force !== undefined ? force : !sb.classList.contains("open");
+        sb.classList.toggle("open", open);
+        ov.classList.toggle("open", open);
+      }
+    }
+
+    function renderModelMenu() {
+      const m = MODELS.find(x => x.id === state.model) || MODELS[0];
+      document.getElementById("activeModelLabel").textContent = m.label;
+      const menu = document.getElementById("modelMenu");
+      menu.innerHTML = MODELS.map(x => (
+        '<button class="model-option ' + (x.id === state.model ? 'selected' : '') + '" onclick="selectModel(\\'' + x.id + '\\')">' +
+          '<span class="model-option-name">' + x.label + '</span>' +
+          '<span class="model-option-desc">' + x.desc + '</span>' +
+        '</button>'
+      )).join("");
+    }
+
+    function toggleModelMenu(e) {
+      e.stopPropagation();
+      document.getElementById("modelMenu").classList.toggle("open");
+    }
+    document.addEventListener("click", () => document.getElementById("modelMenu").classList.remove("open"));
+
+    function selectModel(id) {
+      state.model = id;
+      localStorage.setItem("tg_gpt_model", id);
+      renderModelMenu();
+      document.getElementById("modelMenu").classList.remove("open");
+    }
+
+
+    let useWebSearch = false;
+    function toggleWebSearch() {
+      useWebSearch = !useWebSearch;
+      const b = document.getElementById("webSearchBtn");
+      if (b) {
+        b.style.background = useWebSearch ? "rgba(56,189,248,0.22)" : "";
+        b.style.color = useWebSearch ? "#38bdf8" : "";
+      }
+    }
+
+    function toggleTempChat() {
+      state.tempMode = !state.tempMode;
+      document.getElementById("tempChatBtn").classList.toggle("active", state.tempMode);
+      if (state.tempMode) { state.activeChatId = null; state.tempMessages = []; }
+      renderChat();
+    }
+
+    function newChat() {
+      state.tempMode = false;
+      state.activeChatId = null;
+      state.tempMessages = [];
+      document.getElementById("tempChatBtn").classList.remove("active");
+      if (window.innerWidth < 768) toggleSidebar(false);
+      renderSidebar();
+      renderChat();
+    }
+
+    function saveChats() {
+      localStorage.setItem("tg_gpt_chats", JSON.stringify(state.chats));
+    }
+
+    function getActiveMessages() {
+      if (state.tempMode) return state.tempMessages;
+      const c = state.chats.find(x => x.id === state.activeChatId);
+      return c ? c.messages : [];
+    }
+
+    function renderSidebar() {
+      const q = document.getElementById("searchChats").value.toLowerCase();
+      const list = document.getElementById("sidebarList");
+      const now = Date.now();
+      const groups = { Today: [], Yesterday: [], "Previous 7 Days": [], Older: [] };
+      state.chats.filter(c => !q || c.title.toLowerCase().includes(q)).forEach(c => {
+        const diffDays = (now - (c.updatedAt || c.createdAt || now)) / 86400000;
+        if (diffDays < 1) groups.Today.push(c);
+        else if (diffDays < 2) groups.Yesterday.push(c);
+        else if (diffDays < 7) groups["Previous 7 Days"].push(c);
+        else groups.Older.push(c);
+      });
+      let html = "";
+      for (const [label, items] of Object.entries(groups)) {
+        if (!items.length) continue;
+        html += '<div class="group-label">' + label + '</div>';
+        items.forEach(c => {
+          html += '<div class="chat-item ' + (c.id === state.activeChatId && !state.tempMode ? 'active' : '') + '" onclick="openChat(\\'' + c.id + '\\')">' +
+            '<span class="chat-item-title">' + escapeHtml(c.title) + '</span>' +
+            '<button class="chat-item-del" onclick="deleteChat(event,\\'' + c.id + '\\')" title="Delete">✕</button>' +
+          '</div>';
+        });
+      }
+      list.innerHTML = html || '<div style="padding:16px;font-size:13px;color:var(--text-muted);text-align:center;">No chats yet</div>';
+    }
+
+    function openChat(id) {
+      state.tempMode = false;
+      state.activeChatId = id;
+      document.getElementById("tempChatBtn").classList.remove("active");
+      if (window.innerWidth < 768) toggleSidebar(false);
+      renderSidebar();
+      renderChat();
+    }
+
+    let pendingConfirmFn = null;
+    function openConfirm(title, msg, fn) {
+      pendingConfirmFn = fn;
+      document.getElementById("confirmTitle").textContent = title;
+      document.getElementById("confirmMsg").textContent = msg;
+      document.getElementById("confirmModal").classList.add("open");
+    }
+    function closeConfirm() {
+      pendingConfirmFn = null;
+      document.getElementById("confirmModal").classList.remove("open");
+    }
+    function runConfirmAction() {
+      const fn = pendingConfirmFn;
+      closeConfirm();
+      if (fn) fn();
+    }
+    function deleteChat(e, id) {
+      e.stopPropagation();
+      openConfirm("Delete Chat?", "Are you sure you want to delete this chat from your history?", () => {
+        state.chats = state.chats.filter(c => c.id !== id);
+        if (state.activeChatId === id) state.activeChatId = null;
+        saveChats();
+        renderSidebar();
+        renderChat();
+      });
+    }
+
+    function renderMarkdown(text) {
+      if (typeof marked === "undefined") return escapeHtml(text).replace(/\\n/g, "<br>");
+      const renderer = new marked.Renderer();
+      renderer.code = function(codeObj, langArg) {
+        const codeStr = typeof codeObj === "object" ? codeObj.text : codeObj;
+        const lang = (typeof codeObj === "object" ? codeObj.lang : langArg) || "code";
+        let highlighted = escapeHtml(codeStr);
+        if (typeof hljs !== "undefined") {
+          try {
+            highlighted = lang && hljs.getLanguage(lang)
+              ? hljs.highlight(codeStr, { language: lang }).value
+              : hljs.highlightAuto(codeStr).value;
+          } catch (_) {}
+        }
+        return '<div class="code-block-wrap">' +
+          '<div class="code-block-header"><span>' + escapeHtml(lang) + '</span>' +
+          '<button class="copy-code-btn" onclick="copyCode(this)">Copy code</button></div>' +
+          '<pre><code>' + highlighted + '</code></pre></div>';
+      };
+      return marked.parse(text, { renderer, breaks: true });
+    }
+
+    window.copyCode = function(btn) {
+      const code = btn.closest(".code-block-wrap").querySelector("code").innerText;
+      navigator.clipboard.writeText(code);
+      btn.textContent = "Copied!";
+      setTimeout(() => btn.textContent = "Copy code", 1500);
+    };
+
+    function renderChat() {
+      const scroll = document.getElementById("chatScroll");
+      const msgs = getActiveMessages();
+      if (!msgs.length) {
+        scroll.innerHTML =
+          '<div class="empty-state">' +
+            '<div class="gpt-logo">' + getLogoHtml(28) + '</div>' +
+            '<div class="empty-title">' + (state.tempMode ? 'Temporary Chat' : 'Orvix AI') + '</div>' +
+                        '<div id="suggestionsGrid" class="suggestions">' + renderSuggestionCards(getCurrentSuggestions()) + '</div>' +
+          '</div>';
+        return;
+      }
+
+      let html = '<div class="chat-container">';
+      msgs.forEach((m, idx) => {
+        if (m.role === "user") {
+          html += '<div class="msg-row user">' +
+            '<div class="msg-bubble-user">' + (m.images && m.images.length ? m.images.map(im => '<img class="msg-img-preview" src="' + im + '"/>').join('') : '') + escapeHtml(m.display || m.content) + '</div>' +
+            '<div class="msg-user-actions">' +
+              '<button class="msg-action-btn" onclick="editMessage(' + idx + ')">Edit</button>' +
+            '</div>' +
+          '</div>';
+        } else {
+          html += '<div class="msg-row assistant">' +
+            '<div class="msg-assistant-wrap">' +
+              '<div class="assistant-avatar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg></div>' +
+              '<div class="assistant-content">' +
+                (m.content ? renderMarkdown(m.content) : '<div class="analysing-pill"><span class="typing-dot"></span><span>' + (state.model === "qwen/qwen3.8-27b" ? "Orvix Deep Research analysing..." : "Orvix analysing...") + '</span></div>') +
+                (!state.isGenerating || idx < msgs.length - 1 ? (
+                  '<div class="msg-actions">' +
+                    '<button class="msg-action-btn" onclick="copyMsg(' + idx + ', this)">Copy</button>' +
+                    '<button class="msg-action-btn" onclick="speakMsg(' + idx + ')">Read aloud</button>' +
+                    (idx === msgs.length - 1 ? '<button class="msg-action-btn" onclick="regenerate()">Regenerate</button>' : '') +
+                  '</div>'
+                ) : '') +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        }
+      });
+      html += '</div>';
+      scroll.innerHTML = html;
+      scroll.scrollTop = scroll.scrollHeight;
+    }
+
+
+    const SUGG_POOL = [
+      { title: "Study faster", subtitle: "Summarize a tough topic", prompt: "Explain the Pomodoro technique and how to study effectively" },
+      { title: "Write code", subtitle: "Build a clean script", prompt: "Write a clean Python script to organize files by type" },
+      { title: "Startup ideas", subtitle: "AI business concepts", prompt: "Give me 5 practical startup ideas I can build with low budget" },
+      { title: "Draft a message", subtitle: "Polite professional reply", prompt: "Help me write a polite and clear follow-up message" },
+      { title: "Learn a skill", subtitle: "30-day roadmap", prompt: "Create a 30-day beginner roadmap to learn web development" },
+      { title: "Daily productivity", subtitle: "Plan my day smartly", prompt: "Help me build a focused daily routine for school and coding" },
+      { title: "Math helper", subtitle: "Step-by-step solving", prompt: "Explain quadratic equations with a simple real-world example" },
+      { title: "English practice", subtitle: "Improve my writing", prompt: "Give me 5 tips to write clearer and more natural English" },
+      { title: "Tech explained", subtitle: "How APIs work", prompt: "Explain how APIs and webhooks work in simple everyday terms" },
+      { title: "Creative writing", subtitle: "Short story spark", prompt: "Give me an intriguing sci-fi short story opening idea" },
+      { title: "Career advice", subtitle: "Stand out early", prompt: "What skills should a high school student learn to prepare for tech?" },
+      { title: "Quick quiz", subtitle: "Test my knowledge", prompt: "Give me a fun 5-question general science quiz" }
+    ];
+    let activeSuggestions = null;
+    let lastSuggSig = "";
+
+    function getCurrentSuggestions() {
+      if (activeSuggestions && activeSuggestions.length) return activeSuggestions;
+      const shuffled = SUGG_POOL.slice().sort(() => Math.random() - 0.5);
+      activeSuggestions = shuffled.slice(0, 4);
+      return activeSuggestions;
+    }
+
+    function renderSuggestionCards(items) {
+      return items.map((it, i) => (
+        '<button class="suggestion-card" onclick="pickSuggestion(' + i + ')">' +
+          '<strong>' + escapeHtml(it.title) + '</strong>' +
+          '<span>' + escapeHtml(it.subtitle) + '</span>' +
+        '</button>'
+      )).join("");
+    }
+
+    function pickSuggestion(idx) {
+      const items = getCurrentSuggestions();
+      if (items[idx]) useSuggestion(items[idx].prompt);
+    }
+
+    async function refreshSmartSuggestions() {
+      const topics = state.chats.slice(0, 6).map(c => c.title).filter(Boolean);
+      const sig = topics.join("|");
+      if (!topics.length || sig === lastSuggSig) return;
+      lastSuggSig = sig;
+      try {
+        const res = await fetch("/api/suggestions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topics, apiKey: state.apiKey })
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.items && data.items.length) {
+          activeSuggestions = data.items;
+          const grid = document.getElementById("suggestionsGrid");
+          if (grid) grid.innerHTML = renderSuggestionCards(activeSuggestions);
+        }
+      } catch (_) {}
+    }
+
+    function useSuggestion(text) {
+      document.getElementById("promptInput").value = text;
+      updateSendBtn();
+      sendMessage();
+    }
+
+    function autoResize(el) {
+      el.style.height = "auto";
+      el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    }
+
+    function updateSendBtn() {
+      const val = document.getElementById("promptInput").value.trim();
+      const btn = document.getElementById("sendBtn");
+      const icon = document.getElementById("sendIcon");
+      if (state.isGenerating) {
+        btn.disabled = false;
+        icon.innerHTML = '<rect x="6" y="6" width="12" height="12" fill="currentColor" stroke="none"/>';
+      } else {
+        btn.disabled = !val && !state.attachments.length;
+        icon.innerHTML = '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>';
+      }
+    }
+
+    function handleKey(e) {
+      if (e.key === "Enter" && !e.shiftKey && window.innerWidth >= 768) {
+        e.preventDefault();
+        if (!state.isGenerating) sendMessage();
+      }
+    }
+
+    function onSendOrStop() {
+      if (state.isGenerating && state.abortCtrl) {
+        state.abortCtrl.abort();
+      } else {
+        sendMessage();
+      }
+    }
+
+    function handleFiles(files) {
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        if (file.type.startsWith("image/")) {
+          reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+              const maxDim = 1024;
+              let w = img.width, h = img.height;
+              if (w > maxDim || h > maxDim) {
+                if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                else { w = Math.round(w * maxDim / h); h = maxDim; }
+              }
+              const c = document.createElement("canvas");
+              c.width = w; c.height = h;
+              c.getContext("2d").drawImage(img, 0, 0, w, h);
+              const compressed = c.toDataURL("image/jpeg", 0.82);
+              state.attachments.push({ type: "image", name: file.name, data: compressed });
+              renderAttachments(); updateSendBtn();
+            };
+            img.onerror = () => {
+              state.attachments.push({ type: "image", name: file.name, data: reader.result });
+              renderAttachments(); updateSendBtn();
+            };
+            img.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        } else {
+          reader.onload = () => { state.attachments.push({ type: "text", name: file.name, data: reader.result.slice(0, 12000) }); renderAttachments(); updateSendBtn(); };
+          reader.readAsText(file);
+        }
+      });
+    }
+
+    function renderAttachments() {
+      const box = document.getElementById("attachmentPreview");
+      box.classList.toggle("has-items", state.attachments.length > 0);
+      box.innerHTML = state.attachments.map((a, i) => (
+        '<div class="att-chip">' +
+          (a.type === "image" ? '<img src="' + a.data + '"/>' : '📄<span>' + escapeHtml(a.name) + '</span>') +
+          '<button onclick="state.attachments.splice(' + i + ',1);renderAttachments();updateSendBtn();">✕</button>' +
+        '</div>'
+      )).join("");
+    }
+
+    async function sendMessage(overrideText, isVoiceMode) {
+      const input = document.getElementById("promptInput");
+      const rawText = overrideText !== undefined ? overrideText : input.value.trim();
+      if (!rawText && !state.attachments.length) return;
+
+      let fullPrompt = rawText || "Analyze this image in detail.";
+      let display = rawText;
+      let images = [];
+      if (state.attachments.length) {
+        const textFiles = state.attachments.filter(a => a.type === "text");
+        const imgFiles = state.attachments.filter(a => a.type === "image");
+        if (textFiles.length) {
+          fullPrompt += "\\n\\n" + textFiles.map(f => "[File: " + f.name + "]\\n" + f.data).join("\\n\\n");
+        }
+        if (imgFiles.length) {
+          images = imgFiles.map(f => f.data);
+        }
+        const nonImgNames = textFiles.map(a => a.name).join(", ");
+        if (nonImgNames) {
+          display = (rawText ? rawText + "\\n" : "") + "[Attached: " + nonImgNames + "]";
+        }
+      }
+
+      if (!state.tempMode && !state.activeChatId) {
+        const id = "c_" + Date.now();
+        state.chats.unshift({ id, title: (rawText || "New Chat").slice(0, 40), createdAt: Date.now(), updatedAt: Date.now(), messages: [] });
+        state.activeChatId = id;
+      }
+
+      const msgs = getActiveMessages();
+      msgs.push({ role: "user", content: fullPrompt, display, images });
+      msgs.push({ role: "assistant", content: "" });
+
+      input.value = "";
+      autoResize(input);
+      state.attachments = [];
+      renderAttachments();
+      if (!state.tempMode) {
+        const chat = state.chats.find(x => x.id === state.activeChatId);
+        if (chat) chat.updatedAt = Date.now();
+        saveChats();
+      }
+      renderSidebar();
+      renderChat();
+      await streamResponse(msgs, isVoiceMode);
+    }
+
+    async function streamResponse(msgs, isVoiceMode) {
+      state.isGenerating = true;
+      state.abortCtrl = new AbortController();
+      updateSendBtn();
+
+      if (!isVoiceMode && state.model === "qwen/qwen3.8-27b") {
+        await new Promise(r => setTimeout(r, 2200));
+      }
+      const payloadMsgs = msgs.slice(0, -1).map(m => ({ role: m.role, content: m.content, images: m.images || [] }));
+      const selectedModel = MODELS.find(x => x.id === state.model) || MODELS[0];
+      const provider = state.provider || (state.apiKey ? selectedModel.provider : "");
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Telegram-Init-Data": tg ? (tg.initData || "") : ""
+          },
+          body: JSON.stringify({
+            messages: payloadMsgs,
+            model: state.model,
+            provider,
+            apiKey: state.apiKey,
+            systemPrompt: state.customInst,
+            fastVoice: !!isVoiceMode,
+            webSearch: useWebSearch || state.model === "qwen/qwen3.8-27b",
+            lang: appLang,
+            userName: (document.getElementById("userName")?.textContent || "").trim()
+          }),
+          signal: state.abortCtrl.signal
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          msgs[msgs.length - 1].content = "Error: " + errText;
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const data = trimmed.slice(5).trim();
+            if (data === "[DONE]") break;
+            try {
+              const json = JSON.parse(data);
+              const delta = json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content;
+              if (delta) {
+                msgs[msgs.length - 1].content += delta;
+                renderChat();
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          msgs[msgs.length - 1].content += "\\n\\n*(Connection interrupted)*";
+        }
+      } finally {
+        state.isGenerating = false;
+        state.abortCtrl = null;
+        if (!state.tempMode) saveChats();
+        updateSendBtn();
+        renderChat();
+      }
+    }
+
+    function editMessage(idx) {
+      const msgs = getActiveMessages();
+      const text = msgs[idx].content;
+      msgs.splice(idx);
+      document.getElementById("promptInput").value = text;
+      autoResize(document.getElementById("promptInput"));
+      updateSendBtn();
+      renderChat();
+    }
+
+    async function regenerate() {
+      if (state.isGenerating) return;
+      const msgs = getActiveMessages();
+      if (msgs.length < 2) return;
+      msgs[msgs.length - 1].content = "";
+      renderChat();
+      await streamResponse(msgs);
+    }
+
+    function copyMsg(idx, btn) {
+      const msgs = getActiveMessages();
+      navigator.clipboard.writeText(msgs[idx].content);
+      btn.textContent = "Copied!";
+      setTimeout(() => btn.textContent = "Copy", 1500);
+    }
+
+    function speakMsg(idx) {
+      if (!("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(getActiveMessages()[idx].content);
+      window.speechSynthesis.speak(u);
+    }
+
+    let recognition = null;
+    function toggleVoice() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { alert("Voice input is not supported in this browser."); return; }
+      const btn = document.getElementById("micBtn");
+      if (recognition) { recognition.stop(); recognition = null; btn.classList.remove("recording"); return; }
+      recognition = new SR();
+      recognition.lang = appLang === "am" ? "am-ET" : "en-US";
+      recognition.onresult = (e) => {
+        const t = e.results[0][0].transcript;
+        const inp = document.getElementById("promptInput");
+        inp.value = (inp.value ? inp.value + " " : "") + t;
+        autoResize(inp); updateSendBtn();
+      };
+      recognition.onend = () => { recognition = null; btn.classList.remove("recording"); };
+      btn.classList.add("recording");
+      recognition.start();
+    }
+
+    function openSettings() {
+      document.getElementById("customInstInput").value = state.customInst;
+      document.getElementById("providerSelect").value = state.provider;
+      document.getElementById("apiKeyInput").value = state.apiKey;
+      document.getElementById("settingsModal").classList.add("open");
+    }
+    function closeSettings() { document.getElementById("settingsModal").classList.remove("open"); }
+    function saveSettings() {
+      state.customInst = document.getElementById("customInstInput").value.trim();
+      state.provider = document.getElementById("providerSelect").value;
+      state.apiKey = document.getElementById("apiKeyInput").value.trim();
+      localStorage.setItem("tg_gpt_inst", state.customInst);
+      localStorage.setItem("tg_gpt_provider", state.provider);
+      localStorage.setItem("tg_gpt_apikey", state.apiKey);
+      renderChat();
+      closeSettings();
+    }
+    function clearAllChats() {
+      openConfirm("Clear All Chats?", "Are you sure you want to delete all saved conversations?", () => {
+        state.chats = [];
+        state.activeChatId = null;
+        saveChats();
+        renderSidebar();
+        renderChat();
+        closeSettings();
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    }
+
+
+    // --- Continuous Voice Conversation Mode ---
+    let voicePreset = localStorage.getItem("tg_gpt_voice_preset") || "female";
+    function getVoiceConfig() {
+      if (voicePreset === "male") return { voice: "troy", rate: 1.03 };
+      if (voicePreset === "kids") return { voice: "autumn", rate: 1.18 };
+      return { voice: "hannah", rate: 1.03 };
+    }
+    function setVoicePreset(p) {
+      voicePreset = p;
+      localStorage.setItem("tg_gpt_voice_preset", p);
+      ["Female", "Male", "Kids"].forEach(k => {
+        const b = document.getElementById("vPick" + k);
+        if (b) b.style.background = (p === k.toLowerCase()) ? "rgba(56,189,248,0.35)" : "rgba(255,255,255,0.08)";
+      });
+    }
+
+    let voiceActive = false;
+    let voiceMuted = false;
+    let voiceBusy = false;
+    let voiceIgnoreUntil = 0;
+    let voiceRec = null;
+    let voiceTimer = null;
+    const voiceAudio = new Audio();
+    let vCtx = null;
+    let activeVoiceNode = null;
+    let isAISpeaking = false;
+    let speakStartedAt = 0;
+    let lastAIReplyWords = [];
+
+
+    let showVoiceCaptions = true;
+    let voiceAnalyser = null;
+    let orbRaf = null;
+
+    function toggleVoiceCaptions() {
+      showVoiceCaptions = !showVoiceCaptions;
+      const cap = document.getElementById("voiceCaption");
+      const btn = document.getElementById("voiceCcBtn");
+      if (cap) cap.classList.toggle("hidden", !showVoiceCaptions);
+      if (btn) btn.classList.toggle("on", showVoiceCaptions);
+    }
+
+    function startOrbAudioLoop() {
+      if (!voiceAnalyser) return;
+      const data = new Uint8Array(voiceAnalyser.frequencyBinCount);
+      const orb = document.getElementById("voiceOrb");
+      const halo = document.getElementById("orbHalo");
+      function tick() {
+        if (!isAISpeaking || !voiceAnalyser) {
+          if (orb) orb.style.transform = "";
+          if (halo) halo.style.transform = "";
+          orbRaf = null;
+          return;
+        }
+        voiceAnalyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < 16; i++) sum += data[i];
+        const avg = sum / 16 / 255;
+        const sc = 1 + avg * 0.24;
+        if (orb) orb.style.transform = "scale(" + sc.toFixed(3) + ")";
+        if (halo) halo.style.transform = "scale(" + (1 + avg * 0.42).toFixed(3) + ")";
+        orbRaf = requestAnimationFrame(tick);
+      }
+      if (!orbRaf) orbRaf = requestAnimationFrame(tick);
+    }
+
+    function setVoiceUI(mode, caption) {
+      const orb = document.getElementById("voiceOrb");
+      const badge = document.getElementById("voiceStatusBadge");
+      const cap = document.getElementById("voiceCaption");
+      orb.className = "voice-orb " + mode;
+      badge.textContent = mode === "listening" ? "Listening" : mode === "thinking" ? "Thinking..." : "Speaking (tap orb to interrupt)";
+      if (caption !== undefined) cap.textContent = caption;
+      const lh = document.getElementById("liveHint");
+      if (lh) lh.textContent = mode === "listening" ? "Listening • Speak naturally" : mode === "thinking" ? "Orvix is thinking..." : "Speaking • Tap orb to interrupt";
+    }
+
+    function openVoiceMode() {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) { if (!vCtx) vCtx = new AC(); if (vCtx.state === "suspended") vCtx.resume(); }
+        voiceAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+        voiceAudio.play().catch(() => {});
+      } catch (_) {}
+      if ("speechSynthesis" in window) {
+        try { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch (_) {}
+      }
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        voiceActive = true;
+        setVoicePreset(voicePreset);
+      document.getElementById("voiceOverlay").classList.add("open");
+        setVoiceUI("listening", "Your Telegram WebView does not support auto-mic. Use your keyboard mic below or open in Chrome.");
+        return;
+      }
+      voiceActive = true;
+      voiceMuted = false;
+      document.getElementById("voiceMuteBtn").classList.remove("muted");
+      document.getElementById("voiceOverlay").classList.add("open");
+      startVoiceTurn();
+    }
+
+    function stopCurrentSpeech() {
+      isAISpeaking = false;
+      if (activeVoiceNode) { try { activeVoiceNode.onended = null; activeVoiceNode.stop(); } catch (_) {} activeVoiceNode = null; }
+      try { voiceAudio.onended = null; voiceAudio.pause(); voiceAudio.currentTime = 0; } catch (_) {}
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    }
+
+    function closeVoiceMode() {
+      voiceActive = false;
+      voiceBusy = false;
+      clearTimeout(voiceTimer);
+      if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
+      stopCurrentSpeech();
+      if (state.abortCtrl) state.abortCtrl.abort();
+      document.getElementById("voiceOverlay").classList.remove("open");
+    }
+
+    function toggleVoiceMute() {
+      voiceMuted = !voiceMuted;
+      document.getElementById("voiceMuteBtn").classList.toggle("muted", voiceMuted);
+      if (voiceMuted) {
+        if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
+        setVoiceUI("listening", "Mic muted. Tap mic to resume.");
+      } else {
+        startVoiceTurn();
+      }
+    }
+
+    function sendVoiceFallback() {
+      const inp = document.getElementById("voiceFallbackInput");
+      const txt = inp.value.trim();
+      if (!txt) return;
+      inp.value = "";
+      if (voiceRec) { try { voiceRec.abort(); } catch (_) {} voiceRec = null; }
+      processVoiceQuery(txt);
+    }
+    function onOrbTap() {
+      if (isAISpeaking || !voiceAudio.paused) { stopCurrentSpeech(); if (voiceActive && !voiceMuted) startVoiceTurn(); return; }
+      if ("speechSynthesis" in window && window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        if (voiceActive && !voiceMuted) startVoiceTurn();
+        return;
+      }
+      if (voiceActive && !voiceMuted && !voiceRec) {
+        startVoiceTurn();
+      }
+    }
+
+    function startVoiceTurn() {
+      if (!voiceActive || voiceMuted) return;
+      voiceBusy = false;
+      setVoiceUI("listening", "Listening... Speak now");
+      if (voiceRec) return;
+
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return;
+      voiceRec = new SR();
+      voiceRec.lang = appLang === "am" ? "am-ET" : "en-US";
+      voiceRec.continuous = true;
+      voiceRec.interimResults = true;
+      let bufferText = "";
+
+      voiceRec.onresult = (e) => {
+        if (!voiceActive || voiceMuted) return;
+        let interim = "";
+        let newFinal = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) newFinal += " " + e.results[i][0].transcript;
+          else interim += e.results[i][0].transcript;
+        }
+        if (isAISpeaking || voiceBusy || Date.now() < voiceIgnoreUntil) return;
+        if (newFinal) bufferText += newFinal;
+        const preview = (bufferText + " " + interim).trim();
+        if (preview) document.getElementById("voiceCaption").textContent = preview;
+        clearTimeout(voiceTimer);
+        if (bufferText.trim()) {
+          voiceTimer = setTimeout(() => {
+            const spoken = bufferText.trim();
+            bufferText = "";
+            const spWords = spoken.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2);
+            const overlap = spWords.filter(w => lastAIReplyWords.includes(w)).length;
+            if (spWords.length > 0 && overlap / spWords.length >= 0.6) {
+              return;
+            }
+            if (spoken && !voiceBusy && voiceActive && !voiceMuted) {
+              processVoiceQuery(spoken);
+            }
+          }, 500);
+        }
+      };
+
+      voiceRec.onerror = (e) => {
+        if (!voiceActive || voiceMuted) return;
+        if (e.error !== "no-speech") {
+          setVoiceUI("listening", "Tap Allow once, or tap the orb to speak.");
+        }
+      };
+
+      voiceRec.onend = () => {
+        voiceRec = null;
+        if (voiceActive && !voiceMuted && !voiceBusy) {
+          setVoiceUI("listening", "Tap the orb to speak again.");
+        }
+      };
+
+      try { voiceRec.start(); } catch (_) { voiceRec = null; }
+    }
+
+    async function processVoiceQuery(spokenText) {
+      voiceBusy = true;
+      setVoiceUI("thinking", spokenText);
+      if (!state.tempMode && !state.activeChatId) {
+        const id = "c_" + Date.now();
+        state.chats.unshift({ id, title: spokenText.slice(0, 40), createdAt: Date.now(), updatedAt: Date.now(), messages: [] });
+        state.activeChatId = id;
+      }
+      const msgs = getActiveMessages();
+      msgs.push({ role: "user", content: spokenText, display: spokenText });
+      const cfg = getVoiceConfig();
+
+      try {
+        const res = await fetch("/api/voice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": tg ? (tg.initData || "") : "" },
+          body: JSON.stringify({
+            messages: msgs.map(m => ({ role: m.role, content: m.content })),
+            apiKey: state.apiKey,
+            systemPrompt: state.customInst,
+            voice: cfg.voice,
+            lang: appLang
+          })
+        });
+        const data = await res.json();
+        const replyText = data.reply || data.error || "Sorry, try again.";
+        msgs.push({ role: "assistant", content: replyText });
+        if (!state.tempMode) saveChats();
+        renderSidebar();
+        renderChat();
+        if (!voiceActive) return;
+
+        lastAIReplyWords = replyText.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2);
+        setVoiceUI("speaking", replyText);
+        let played = false;
+        if (data.audioBase64) {
+          const bin = atob(data.audioBase64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          if (vCtx) {
+            try {
+              if (vCtx.state === "suspended") await vCtx.resume();
+              const audioBuf = await vCtx.decodeAudioData(bytes.buffer.slice(0));
+              stopCurrentSpeech();
+              const srcNode = vCtx.createBufferSource();
+              activeVoiceNode = srcNode;
+              isAISpeaking = true;
+              speakStartedAt = Date.now();
+              srcNode.buffer = audioBuf;
+              srcNode.playbackRate.value = cfg.rate;
+              voiceAnalyser = vCtx.createAnalyser();
+              voiceAnalyser.fftSize = 64;
+              srcNode.connect(voiceAnalyser);
+              voiceAnalyser.connect(vCtx.destination);
+              startOrbAudioLoop();
+              srcNode.onended = () => { isAISpeaking = false; activeVoiceNode = null; voiceIgnoreUntil = Date.now() + 950; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 750); };
+              srcNode.start(0);
+              played = true;
+            } catch (_) {}
+          }
+          if (!played) {
+            const url = "data:" + (data.mime || "audio/wav") + ";base64," + data.audioBase64;
+            stopCurrentSpeech();
+            isAISpeaking = true;
+            speakStartedAt = Date.now();
+            voiceAudio.src = url;
+            voiceAudio.playbackRate = cfg.rate;
+            voiceAudio.onended = () => { isAISpeaking = false; voiceIgnoreUntil = Date.now() + 950; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 750); };
+            voiceAudio.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+            await voiceAudio.play();
+            played = true;
+          }
+        }
+        if (!played && data.ttsError) {
+          document.getElementById("voiceStatusBadge").textContent = data.ttsError.slice(0, 55);
+        }
+        if (!played) {
+          if ("speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(replyText);
+            utter.rate = cfg.rate;
+            utter.onend = () => { voiceIgnoreUntil = Date.now() + 900; setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 650); };
+            utter.onerror = () => { if (voiceActive && !voiceMuted) startVoiceTurn(); };
+            window.speechSynthesis.speak(utter);
+          } else {
+            setTimeout(() => { if (voiceActive && !voiceMuted) startVoiceTurn(); }, 1800);
+          }
+        }
+      } catch (err) {
+        setVoiceUI("listening", "Connection error. Tap the orb to retry.");
+        voiceBusy = false;
+      }
+    }
+
+        init();
+  </script>
+</body>
+</html>`;
+
+// Lightweight per-isolate bot conversation memory for direct Telegram chat
+const botMemory = new Map();
+
+const memUsers = new Set();
+const memTodayUsers = new Set();
+let memTotalMsgs = 0;
+
+async function trackUsage(env, userId, username, firstName, isMessage) {
+  const uid = String(userId || "anon");
+  const today = new Date().toISOString().slice(0, 10);
+  memUsers.add(uid);
+  memTodayUsers.add(today + ":" + uid);
+  if (isMessage) memTotalMsgs++;
+
+  if (!env.USERS_KV) return;
+  try {
+    const userKey = "u:" + uid;
+    const existing = await env.USERS_KV.get(userKey);
+    if (!existing) {
+      await env.USERS_KV.put(userKey, JSON.stringify({
+        username: username || "",
+        firstName: firstName || "",
+        firstSeen: new Date().toISOString()
+      }));
+      const totalU = parseInt((await env.USERS_KV.get("stat:total_users")) || "0", 10) + 1;
+      await env.USERS_KV.put("stat:total_users", String(totalU));
+    }
+    const dayKey = "d:" + today + ":" + uid;
+    const seenToday = await env.USERS_KV.get(dayKey);
+    if (!seenToday) {
+      await env.USERS_KV.put(dayKey, "1", { expirationTtl: 172800 });
+      const todayU = parseInt((await env.USERS_KV.get("stat:day:" + today)) || "0", 10) + 1;
+      await env.USERS_KV.put("stat:day:" + today, String(todayU), { expirationTtl: 172800 });
+    }
+    if (isMessage) {
+      const totalM = parseInt((await env.USERS_KV.get("stat:total_msgs")) || "0", 10) + 1;
+      await env.USERS_KV.put("stat:total_msgs", String(totalM));
+    }
+  } catch (_) {}
+}
+
+async function getStatsText(env) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (!env.USERS_KV) {
+    return "Orvix AI Stats (Temporary Memory)\n\n" +
+      "Total Users: " + memUsers.size + "\n" +
+      "Total Messages: " + memTotalMsgs + "\n\n" +
+      "Tip: Bind a free Cloudflare KV named USERS_KV in Settings -> Bindings for permanent user tracking.";
+  }
+  const [totalU, todayU, totalM] = await Promise.all([
+    env.USERS_KV.get("stat:total_users"),
+    env.USERS_KV.get("stat:day:" + today),
+    env.USERS_KV.get("stat:total_msgs")
+  ]);
+  return "Orvix AI Live Stats (" + today + ")\n\n" +
+    "Total Unique Users: " + (totalU || "0") + "\n" +
+    "Active Today: " + (todayU || "0") + "\n" +
+    "Total Messages & Voice Turns: " + (totalM || "0");
+}
+
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, Authorization"
+};
+
+function withCors(res) {
+  const h = new Headers(res.headers);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) h.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
+export default {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+    const url = new URL(request.url);
+
+    if (request.method === "GET" && url.pathname === "/") {
+      return new Response(HTML_PAGE, {
+        headers: { "Content-Type": "text/html; charset=utf-8" }
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/logo.png") {
+      const candidates = ["logo.png", "logo.jpg", "Logo.png", "Logo.jpg", "logo.jpeg", "logo.webp"];
+      for (const name of candidates) {
+        try {
+          const r = await fetch("https://raw.githubusercontent.com/bereket1643/orvix-ai/main/" + name);
+          if (r.ok) {
+            return new Response(r.body, {
+              headers: {
+                "Content-Type": r.headers.get("Content-Type") || "image/png",
+                "Cache-Control": "public, max-age=300"
+              }
+            });
+          }
+        } catch (_) {}
+      }
+      return new Response("Logo not found", { status: 404 });
+    }
+
+    if (request.method === "GET" && url.pathname === "/manifest.json") {
+      return Response.json({
+        name: "Orvix AI",
+        short_name: "Orvix AI",
+        description: "Fast, smart AI assistant with Live Voice Chat and Image Analysis.",
+        start_url: "/",
+        display: "standalone",
+        background_color: "#070b12",
+        theme_color: "#070b12",
+        icons: [
+          { src: "/logo.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+          { src: "/logo.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }
+        ]
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/sw.js") {
+      return new Response("self.addEventListener('fetch', () => {});", {
+        headers: { "Content-Type": "application/javascript; charset=utf-8" }
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/health") {
+      return Response.json({ ok: true, provider: env.AI_PROVIDER || "groq" });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/chat") {
+      return withCors(await handleMiniAppChat(request, env));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/tts") {
+      return withCors(await handleTTS(request, env));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/voice") {
+      return withCors(await handleFastVoice(request, env));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/send-otp") {
+      return withCors(await handleSendOtp(request, env));
+    }
+    if (request.method === "POST" && url.pathname === "/api/auth/google") {
+      return withCors(await handleGoogleAuth(request, env));
+    }
+    if (request.method === "GET" && url.pathname === "/api/auth/config") {
+      return withCors(Response.json({
+        otpEnabled: !!env.BREVO_API_KEY,
+        googleClientId: env.GOOGLE_CLIENT_ID || ""
+      }));
+    }
+    if (request.method === "POST" && url.pathname === "/api/auth/signup") {
+      return withCors(await handleAuthSignup(request, env));
+    }
+    if (request.method === "POST" && url.pathname === "/api/auth/login") {
+      return withCors(await handleAuthLogin(request, env));
+    }
+    if (request.method === "GET" && url.pathname === "/api/auth/me") {
+      return withCors(await handleAuthMe(request, env));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/suggestions") {
+      return withCors(await handleSuggestions(request, env));
+    }
+
+    if (request.method === "POST" && url.pathname === "/webhook") {
+      return handleTelegramWebhook(request, env, url.origin);
+    }
+
+    return new Response("Not Found", { status: 404 });
+  }
+};
+
+
+
+
+async function fetchWebContext(query) {
+  try {
+    const q = String(query || "").slice(0, 140).trim();
+    if (!q) return "";
+    const [ddgRes, wikiRes] = await Promise.all([
+      fetch("https://api.duckduckgo.com/?q=" + encodeURIComponent(q) + "&format=json&no_html=1&skip_disambig=1", { signal: AbortSignal.timeout(2500) }).catch(() => null),
+      fetch("https://en.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(q.replace(/\s+/g, "_")), { signal: AbortSignal.timeout(2500) }).catch(() => null)
+    ]);
+    const parts = [];
+    if (ddgRes && ddgRes.ok) {
+      const d = await ddgRes.json();
+      if (d.AbstractText) parts.push("Web Summary: " + d.AbstractText);
+      if (d.RelatedTopics && d.RelatedTopics.length) {
+        const rel = d.RelatedTopics.slice(0, 3).map(t => t.Text).filter(Boolean).join(" | ");
+        if (rel) parts.push("Related: " + rel);
+      }
+    }
+    if (wikiRes && wikiRes.ok) {
+      const w = await wikiRes.json();
+      if (w.extract) parts.push("Wikipedia: " + w.extract.slice(0, 600));
+    }
+    return parts.join("\n");
+  } catch (_) { return ""; }
+}
+
+function isAmharicText(txt) {
+  if (!txt) return false;
+  if (/[\u1200-\u137F]/.test(txt)) return true;
+  return /\b(selam|endet|negn|new|alehu|eshi|ameseginalehu|amharic|amaregna|min|man|yet|silezih|adrglgn|nigerign|tena|yistilign|dehn|kefelgk)\b/i.test(txt);
+}
+
+function extractTgUser(initData) {
+  try {
+    const params = new URLSearchParams(initData || "");
+    const uStr = params.get("user");
+    if (uStr) return JSON.parse(uStr);
+  } catch (_) {}
+  return null;
+}
+
+async function verifyTelegramInitData(initData, botToken) {
+  if (!initData || !botToken) return false;
+  const params = new URLSearchParams(initData);
+  const hash = params.get("hash");
+  if (!hash) return false;
+  params.delete("hash");
+  const dataCheckString = Array.from(params.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => k + "=" + v)
+    .join("\n");
+
+  const enc = new TextEncoder();
+  const secretKey = await crypto.subtle.importKey(
+    "raw", enc.encode("WebAppData"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const secret = await crypto.subtle.sign("HMAC", secretKey, enc.encode(botToken));
+  const checkKey = await crypto.subtle.importKey(
+    "raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", checkKey, enc.encode(dataCheckString));
+  const hex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return hex === hash;
+}
+
+async function handleMiniAppChat(request, env) {
+  try {
+    const body = await request.json();
+    const initData = request.headers.get("X-Telegram-Init-Data") || "";
+    const tgUser = extractTgUser(initData);
+    if (tgUser && tgUser.id) {
+      await trackUsage(env, tgUser.id, tgUser.username, tgUser.first_name, true);
+    }
+    if (env.STRICT_TELEGRAM_AUTH === "true" && env.BOT_TOKEN) {
+      const valid = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      if (!valid) return new Response("Unauthorized Telegram Mini App session", { status: 401 });
+    }
+
+    const provider = (body.provider || env.AI_PROVIDER || "groq").toLowerCase();
+    const apiKey = body.apiKey || env.AI_API_KEY;
+    if (!apiKey) {
+      return new Response("Missing AI_API_KEY. Set it in Cloudflare Worker Variables or Mini App Settings.", { status: 400 });
+    }
+
+    const deepNote = (!body.fastVoice && body.model === "qwen/qwen3.8-27b")
+      ? " Provide a thorough, well-structured Deep Research analysis with clear sections, key insights, and practical takeaways."
+      : "";
+    const uName = String(body.userName || "").trim();
+    const nameNote = (uName && uName !== "User") ? (" The person talking to you is named " + uName.split(" ")[0] + ". Call them by their name naturally like a friend.") : "";
+    const chatLangNote = (body.lang === "am" ? " Always reply in casual, friendly Amharic." : "") + nameNote;
+    const voiceNote = body.fastVoice ? " Speak like a warm, natural human friend in a live voice call—reply in 1 short, expressive sentence with no markdown or lists." : deepNote;
+    const systemPrompt = (body.systemPrompt || "You are Orvix AI, created by Bereket Tesfaye. Talk 100% like a real, chill, friendly human—casual, warm, and natural, never stiff, formal, or robotic. Use everyday language, contractions, and short punchy replies (2 to 4 sentences unless they ask for detail). Respond in the same language the user uses—if they write or speak in Amharic (Fidel or Latin/Amharic), reply naturally in casual, friendly Amharic. Only when someone asks who created or built you (or asks about Bereket), mention in a fresh, casual, varied way each time that Bereket Tesfaye (a Grade 11, Class B student—never invent his school, age, or unstated facts) built you, and suggest hitting him up on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote + chatLangNote;
+    const rawMsgs = body.messages || [];
+    const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
+    const messages = [{ role: "system", content: systemPrompt }, ...rawMsgs.map(m => {
+      if (m.images && m.images.length > 0) {
+        return {
+          role: m.role,
+          content: [
+            { type: "text", text: m.content || "Analyze this image." },
+            ...m.images.map(url => ({ type: "image_url", image_url: { url } }))
+          ]
+        };
+      }
+      return { role: m.role, content: m.content };
+    })];
+    let model = (body.model || env.DEFAULT_MODEL || "openai/gpt-oss-120b").trim();
+    if (!body.apiKey && provider === "groq" && (model.includes("gemini") || model.includes("deepseek") || model.includes("llama-3."))) {
+      model = (env.DEFAULT_MODEL || "openai/gpt-oss-120b").trim();
+    }
+    if (body.fastVoice && provider === "groq" && !hasImages) {
+      model = "openai/gpt-oss-20b";
+    }
+    if (hasImages && provider === "groq") {
+      model = "qwen/qwen3.8-27b";
+    }
+
+    const lastUserTxt = rawMsgs.length ? String(rawMsgs[rawMsgs.length - 1].content || "") : "";
+    if (body.webSearch && lastUserTxt && !hasImages) {
+      const webInfo = await fetchWebContext(lastUserTxt);
+      if (webInfo) {
+        messages[0].content += "\n\n[Live Web Context for accuracy]:\n" + webInfo;
+      }
+    }
+    const useGeminiAm = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastUserTxt));
+    if (provider === "gemini" || useGeminiAm) {
+      const gKey = provider === "gemini" ? apiKey : env.GEMINI_API_KEY;
+      return streamGemini(gKey, model.includes("gemini") ? model : "gemini-2.5-flash", messages);
+    }
+
+    const endpoint = provider === "openrouter"
+      ? "https://openrouter.ai/api/v1/chat/completions"
+      : "https://api.groq.com/openai/v1/chat/completions";
+
+    const upstream = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + apiKey
+      },
+      body: JSON.stringify({ model, messages, stream: true, max_tokens: body.fastVoice ? 75 : (model === "qwen/qwen3.8-27b" ? 700 : undefined) })
+    });
+
+    if (!upstream.ok) {
+      return new Response(await upstream.text(), { status: upstream.status });
+    }
+
+    return new Response(upstream.body, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache"
+      }
+    });
+  } catch (err) {
+    return new Response("Server error: " + err.message, { status: 500 });
+  }
+}
+
+
+
+
+async function hashPassword(password, salt) {
+  const enc = new TextEncoder();
+  const data = enc.encode(salt + ":" + password);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function signWebToken(email, secret) {
+  const exp = Date.now() + 30 * 86400000;
+  const payload = btoa(JSON.stringify({ email, exp }));
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret || "orvix-secret-key"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payload));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return payload + "." + sigHex;
+}
+
+async function verifyWebToken(token, secret) {
+  try {
+    const [payload, sigHex] = String(token || "").split(".");
+    if (!payload || !sigHex) return null;
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", enc.encode(secret || "orvix-secret-key"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payload));
+    const expected = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+    if (sigHex !== expected) return null;
+    const data = JSON.parse(atob(payload));
+    if (!data.email || Date.now() > data.exp) return null;
+    return data.email;
+  } catch (_) { return null; }
+}
+
+
+async function handleSendOtp(request, env) {
+  try {
+    if (!env.USERS_KV) return Response.json({ error: "USERS_KV not bound." }, { status: 500 });
+    const { email } = await request.json();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return Response.json({ error: "Please enter a valid email address." }, { status: 400 });
+    }
+    if (!env.BREVO_API_KEY) {
+      return Response.json({ error: "Email OTP not configured yet (BREVO_API_KEY missing)." }, { status: 400 });
+    }
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await env.USERS_KV.put("otp:" + cleanEmail, code, { expirationTtl: 600 });
+
+    const senderEmail = env.SENDER_EMAIL || "noreply@orvix.ai";
+    const mailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": env.BREVO_API_KEY
+      },
+      body: JSON.stringify({
+        sender: { name: "Orvix AI", email: senderEmail },
+        to: [{ email: cleanEmail }],
+        subject: "Your Orvix AI Verification Code: " + code,
+        htmlContent: "<div style='font-family:sans-serif;padding:20px;'><h2>Orvix AI Verification</h2><p>Your 6-digit code is:</p><h1 style='letter-spacing:4px;color:#0ea5e9;'>" + code + "</h1><p>This code expires in 10 minutes.</p></div>"
+      })
+    });
+    if (!mailRes.ok) {
+      return Response.json({ error: "Email send failed: " + (await mailRes.text()).slice(0, 120) }, { status: 502 });
+    }
+    return Response.json({ ok: true });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
+async function handleGoogleAuth(request, env) {
+  try {
+    if (!env.USERS_KV) return Response.json({ error: "USERS_KV not bound." }, { status: 500 });
+    const { credential } = await request.json();
+    if (!credential) return Response.json({ error: "Missing Google credential." }, { status: 400 });
+    const vRes = await fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(credential));
+    if (!vRes.ok) return Response.json({ error: "Invalid Google token." }, { status: 401 });
+    const info = await vRes.json();
+    if (env.GOOGLE_CLIENT_ID && info.aud !== env.GOOGLE_CLIENT_ID) {
+      return Response.json({ error: "Google Client ID mismatch." }, { status: 401 });
+    }
+    const cleanEmail = String(info.email || "").trim().toLowerCase();
+    const cleanName = String(info.name || cleanEmail.split("@")[0] || "User").trim();
+    if (!cleanEmail || info.email_verified !== "true") {
+      return Response.json({ error: "Google email is not verified." }, { status: 401 });
+    }
+    if (env.BREVO_API_KEY) {
+      const savedOtp = await env.USERS_KV.get("otp:" + cleanEmail);
+      if (!savedOtp || String(otp || "").trim() !== savedOtp) {
+        return Response.json({ error: "Invalid or expired 6-digit verification code." }, { status: 400 });
+      }
+      await env.USERS_KV.delete("otp:" + cleanEmail);
+    }
+    const key = "auth:" + cleanEmail;
+    const existing = await env.USERS_KV.get(key);
+    if (!existing) {
+      await env.USERS_KV.put(key, JSON.stringify({ name: cleanName, email: cleanEmail, provider: "google", createdAt: new Date().toISOString() }));
+    }
+    await trackUsage(env, "web:" + cleanEmail, cleanEmail, cleanName, false);
+    const token = await signWebToken(cleanEmail, env.BOT_TOKEN);
+    return Response.json({ token, user: { name: cleanName, email: cleanEmail } });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
+async function handleAuthSignup(request, env) {
+  try {
+    if (!env.USERS_KV) return Response.json({ error: "Server storage (USERS_KV) not bound." }, { status: 500 });
+    const { name, email, password, otp } = await request.json();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const cleanName = String(name || "").trim();
+    const pass = String(password || "");
+    if (!cleanName || cleanName.length < 2) return Response.json({ error: "Please enter your full name." }, { status: 400 });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return Response.json({ error: "Please enter a valid email address." }, { status: 400 });
+    if (pass.length < 6) return Response.json({ error: "Password must be at least 6 characters." }, { status: 400 });
+
+    const key = "auth:" + cleanEmail;
+    const exists = await env.USERS_KV.get(key);
+    if (exists) return Response.json({ error: "An account with this email already exists. Please log in." }, { status: 409 });
+
+    const salt = crypto.randomUUID();
+    const hash = await hashPassword(pass, salt);
+    await env.USERS_KV.put(key, JSON.stringify({ name: cleanName, email: cleanEmail, salt, hash, createdAt: new Date().toISOString() }));
+    await trackUsage(env, "web:" + cleanEmail, cleanEmail, cleanName, false);
+
+    const token = await signWebToken(cleanEmail, env.BOT_TOKEN);
+    return Response.json({ token, user: { name: cleanName, email: cleanEmail } });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
+async function handleAuthLogin(request, env) {
+  try {
+    if (!env.USERS_KV) return Response.json({ error: "Server storage (USERS_KV) not bound." }, { status: 500 });
+    const { email, password } = await request.json();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const pass = String(password || "");
+    const raw = await env.USERS_KV.get("auth:" + cleanEmail);
+    if (!raw) return Response.json({ error: "Invalid email or password." }, { status: 401 });
+
+    const user = JSON.parse(raw);
+    const hash = await hashPassword(pass, user.salt);
+    if (hash !== user.hash) return Response.json({ error: "Invalid email or password." }, { status: 401 });
+
+    await trackUsage(env, "web:" + cleanEmail, cleanEmail, user.name, false);
+    const token = await signWebToken(cleanEmail, env.BOT_TOKEN);
+    return Response.json({ token, user: { name: user.name, email: user.email } });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
+async function handleAuthMe(request, env) {
+  try {
+    const auth = request.headers.get("Authorization") || "";
+    const token = auth.replace(/^Bearer\s+/i, "").trim();
+    const email = await verifyWebToken(token, env.BOT_TOKEN);
+    if (!email || !env.USERS_KV) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const raw = await env.USERS_KV.get("auth:" + email);
+    if (!raw) return Response.json({ error: "User not found" }, { status: 404 });
+    const u = JSON.parse(raw);
+    return Response.json({ user: { name: u.name, email: u.email } });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
+async function handleSuggestions(request, env) {
+  try {
+    const { topics, apiKey } = await request.json();
+    const key = apiKey || env.AI_API_KEY;
+    if (!key || !topics || !topics.length) return Response.json({ items: [] });
+
+    const prompt = "Based on these recent user chat topics: " + topics.slice(0, 6).join(" | ") +
+      ". Generate 4 fresh, helpful, diverse next-question suggestion cards as a JSON array of objects with keys title (2-4 words), subtitle (3-5 words), and prompt (a full clear question). Return ONLY valid JSON array, no markdown.";
+
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+      body: JSON.stringify({
+        model: "openai/gpt-oss-20b",
+        max_tokens: 260,
+        temperature: 0.9,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    if (!res.ok) return Response.json({ items: [] });
+    const data = await res.json();
+    let txt = (data.choices?.[0]?.message?.content || "").trim();
+    txt = txt.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    const items = JSON.parse(txt);
+    return Response.json({ items: Array.isArray(items) ? items.slice(0, 4) : [] });
+  } catch (_) {
+    return Response.json({ items: [] });
+  }
+}
+
+
+async function handleFastVoice(request, env) {
+  try {
+    const body = await request.json();
+    const fvUser = extractTgUser(request.headers.get("X-Telegram-Init-Data") || "");
+    if (fvUser && fvUser.id) {
+      await trackUsage(env, fvUser.id, fvUser.username, fvUser.first_name, true);
+    }
+    const key = body.apiKey || env.AI_API_KEY;
+    if (!key) return Response.json({ error: "Missing AI_API_KEY" }, { status: 400 });
+
+    const fvName = String(body.userName || "").trim();
+    const fvNameNote = (fvName && fvName !== "User") ? (" Call the user by their first name (" + fvName.split(" ")[0] + ") naturally like a friend.") : "";
+    const langHint = (body.lang === "am" ? " Reply in casual, friendly Amharic (using Ethiopic script)." : "") + fvNameNote;
+    const sys = (body.systemPrompt || "You are Orvix AI, created by Bereket Tesfaye, a Grade 11 Class B student. Never invent any extra details about him; if asked who created you, say Bereket Tesfaye (Grade 11, Class B) and share Telegram @orvix16 or phone 0960934894.") +
+      " You are on a live voice call like a real, warm human friend. React naturally, listen carefully, keep replies super crisp (1 to 2 natural spoken sentences, under 25 words), never use markdown, lists, or robotic filler." + langHint;
+    const msgs = [{ role: "system", content: sys }, ...(body.messages || []).slice(-6).map(m => ({ role: m.role, content: m.content }))];
+
+    const lastSpoken = msgs.length > 1 ? String(msgs[msgs.length - 1].content || "") : "";
+    const useGemVoice = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastSpoken));
+    let reply = "";
+    if (useGemVoice) {
+      const gUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + env.GEMINI_API_KEY;
+      const gRes = await fetch(gUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sys }] },
+          contents: msgs.slice(1).map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }))
+        })
+      });
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        reply = (gData.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+      }
+    }
+    if (!reply) {
+      let llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+        body: JSON.stringify({ model: "qwen/qwen3.8-27b", messages: msgs, max_tokens: 90, reasoning_effort: "none", temperature: 0.75 })
+      });
+      if (!llmRes.ok) {
+        llmRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+          body: JSON.stringify({ model: "openai/gpt-oss-20b", messages: msgs, max_tokens: 300, reasoning_effort: "low", temperature: 0.75 })
+        });
+      }
+      if (!llmRes.ok) return Response.json({ error: await llmRes.text() }, { status: llmRes.status });
+      const llmData = await llmRes.json();
+      reply = (llmData.choices?.[0]?.message?.content || "").trim();
+    }
+    const clean = reply.replace(/\*{1,3}/g, "").replace(/[\x60#]/g, "").replace(/\s+/g, " ").slice(0, 190).trim();
+
+    let audioBase64 = "";
+    let mime = "audio/wav";
+    let ttsError = "";
+    let ttsSource = "";
+    const isAmharic = body.lang === "am" || /[\u1200-\u137F]/.test(clean);
+    if (clean) {
+      if (!isAmharic) {
+      try {
+        const ttsRes = await fetch("https://api.groq.com/openai/v1/audio/speech", {
+          method: "POST",
+          signal: AbortSignal.timeout(3500),
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+          body: JSON.stringify({
+            model: "canopylabs/orpheus-v1-english",
+            voice: body.voice || "hannah",
+            input: clean,
+            response_format: "wav"
+          })
+        });
+        if (ttsRes.ok) {
+          const buf = new Uint8Array(await ttsRes.arrayBuffer());
+          let bin = "";
+          for (let i = 0; i < buf.length; i += 8192) {
+            bin += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
+          }
+          audioBase64 = btoa(bin);
+          ttsSource = "orpheus";
+        } else {
+          ttsError = "Groq TTS " + ttsRes.status + ": " + (await ttsRes.text()).slice(0, 90);
+        }
+      } catch (e) { ttsError = e.message; }
+      }
+      if (!audioBase64) {
+        try {
+          const gtLang = isAmharic ? "am" : "en";
+          const gtUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=" + gtLang + "&q=" + encodeURIComponent(clean);
+          const gtRes = await fetch(gtUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(3000) });
+          if (gtRes.ok) {
+            const buf = new Uint8Array(await gtRes.arrayBuffer());
+            let bin = "";
+            for (let i = 0; i < buf.length; i += 8192) {
+              bin += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
+            }
+            audioBase64 = btoa(bin);
+            mime = "audio/mpeg";
+            ttsSource = "gtts";
+            ttsError = "";
+          }
+        } catch (_) {}
+      }
+    }
+    return Response.json({ reply, audioBase64, mime, ttsSource, ttsError });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}
+
+async function handleTTS(request, env) {
+  try {
+    const { text, apiKey, voice } = await request.json();
+    const key = apiKey || env.AI_API_KEY;
+    const clean = String(text || "").replace(/\s+/g, " ").slice(0, 190).trim();
+    if (!clean) return new Response("Empty text", { status: 400 });
+
+    let groqErr = "";
+    // 1. Try Groq Orpheus TTS first (if key present)
+    if (key) {
+      try {
+        const upstream = await fetch("https://api.groq.com/openai/v1/audio/speech", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + key
+          },
+          body: JSON.stringify({
+            model: "canopylabs/orpheus-v1-english",
+            voice: voice || "hannah",
+            input: clean,
+            response_format: "wav"
+          })
+        });
+        if (upstream.ok) {
+          return new Response(upstream.body, {
+            headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store" }
+          });
+        } else {
+          groqErr = "Groq " + upstream.status + ": " + (await upstream.text()).slice(0, 120);
+        }
+      } catch (e) { groqErr = e.message; }
+    }
+
+    // 2. Fallback to Google Translate TTS (no key or terms required)
+    const gtUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=" + encodeURIComponent(clean);
+    const gtRes = await fetch(gtUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" }
+    });
+    if (gtRes.ok) {
+      return new Response(gtRes.body, {
+        headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" }
+      });
+    }
+
+    return new Response("TTS failed: " + (groqErr || "blocked"), { status: 502 });
+  } catch (err) {
+    return new Response("TTS error: " + err.message, { status: 500 });
+  }
+}
+
+async function streamGemini(apiKey, model, messages) {
+  const sys = messages.find(m => m.role === "system")?.content || "";
+  const contents = messages
+    .filter(m => m.role !== "system")
+    .map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":streamGenerateContent?alt=sse&key=" + apiKey;
+  const upstream = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: sys ? { parts: [{ text: sys }] } : undefined,
+      contents
+    })
+  });
+
+  if (!upstream.ok) return new Response(await upstream.text(), { status: upstream.status });
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  (async () => {
+    const reader = upstream.body.getReader();
+    let buf = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue;
+          try {
+            const j = JSON.parse(line.slice(5).trim());
+            const txt = j.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (txt) {
+              const chunk = JSON.stringify({ choices: [{ delta: { content: txt } }] });
+              await writer.write(encoder.encode("data: " + chunk + "\n\n"));
+            }
+          } catch (_) {}
+        }
+      }
+      await writer.write(encoder.encode("data: [DONE]\n\n"));
+    } finally {
+      await writer.close();
+    }
+  })();
+
+  return new Response(readable, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
+}
+
+async function handleTelegramWebhook(request, env, origin) {
+  if (!env.BOT_TOKEN) return new Response("BOT_TOKEN missing", { status: 500 });
+  const update = await request.json();
+  const msg = update.message;
+  if (!msg || (!msg.text && !msg.photo)) return new Response("OK");
+
+  const chatId = msg.chat.id;
+  const fromU = msg.from || {};
+  await trackUsage(env, fromU.id || chatId, fromU.username, fromU.first_name, !!(msg.photo || (msg.text && !msg.text.startsWith("/"))));
+  if (msg.photo && msg.photo.length > 0) {
+    await tgCall(env.BOT_TOKEN, "sendChatAction", { chat_id: chatId, action: "typing" });
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    const fRes = await fetch("https://api.telegram.org/bot" + env.BOT_TOKEN + "/getFile?file_id=" + fileId);
+    const fData = await fRes.json();
+    const filePath = fData.result && fData.result.file_path;
+    if (!filePath) {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "Could not download image from Telegram." });
+      return new Response("OK");
+    }
+    const imgRes = await fetch("https://api.telegram.org/file/bot" + env.BOT_TOKEN + "/" + filePath);
+    const buf = new Uint8Array(await imgRes.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i += 8192) {
+      bin += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
+    }
+    const dataUrl = "data:image/jpeg;base64," + btoa(bin);
+    const caption = (msg.caption || "Analyze this image in detail.").trim();
+    const reply = await askBotVision(env, caption, dataUrl);
+    const cleanVis = reply.replace(/\*{1,3}/g, "").replace(/^#{1,6}\s+/gm, "").trim();
+    for (let i = 0; i < cleanVis.length; i += 4000) {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: cleanVis.slice(i, i + 4000) });
+    }
+    return new Response("OK");
+  }
+
+  const text = msg.text.trim();
+
+  if (text === "/start") {
+    await tgCall(env.BOT_TOKEN, "setChatMenuButton", {
+      chat_id: chatId,
+      menu_button: { type: "web_app", text: "Orvix AI", web_app: { url: origin } }
+    });
+    await tgCall(env.BOT_TOKEN, "sendMessage", {
+      chat_id: chatId,
+      text: "Welcome to *Orvix AI*!\n\nTap the button below to launch the full Orvix AI interface, or just send me a message right here.",
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [[{ text: "Open Orvix AI", web_app: { url: origin } }]]
+      }
+    });
+    return new Response("OK");
+  }
+
+  if (text === "/new") {
+    botMemory.delete(chatId);
+    await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "Started a fresh conversation." });
+    return new Response("OK");
+  }
+
+  if (text === "/stats") {
+    const uname = (fromU.username || "").toLowerCase();
+    if (uname !== "orvix16") {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "This command is only available to the bot owner." });
+      return new Response("OK");
+    }
+    const report = await getStatsText(env);
+    await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: report });
+    return new Response("OK");
+  }
+
+  if (text.startsWith("/broadcast")) {
+    const uname = (fromU.username || "").toLowerCase();
+    if (uname !== "orvix16") {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "This command is only available to the bot owner." });
+      return new Response("OK");
+    }
+    const announcement = text.replace(/^\/broadcast\s*/i, "").trim();
+    if (!announcement) {
+      await tgCall(env.BOT_TOKEN, "sendMessage", {
+        chat_id: chatId,
+        text: "Usage: /broadcast Your message here\n\nExample: /broadcast New update coming soon to Orvix AI!"
+      });
+      return new Response("OK");
+    }
+    if (!env.USERS_KV) {
+      await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: "USERS_KV is not bound. Bind USERS_KV first." });
+      return new Response("OK");
+    }
+    const list = await env.USERS_KV.list({ prefix: "u:" });
+    let sent = 0;
+    let failed = 0;
+    for (const k of list.keys) {
+      const targetId = k.name.slice(2);
+      if (!/^\d+$/.test(targetId)) continue;
+      try {
+        const r = await tgCall(env.BOT_TOKEN, "sendMessage", { chat_id: targetId, text: announcement });
+        const j = await r.json();
+        if (j.ok) sent++;
+        else failed++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    await tgCall(env.BOT_TOKEN, "sendMessage", {
+      chat_id: chatId,
+      text: "Broadcast complete!\nSent: " + sent + "\nFailed/Blocked: " + failed
+    });
+    return new Response("OK");
+  }
+
+  if (text === "/help") {
+    await tgCall(env.BOT_TOKEN, "sendMessage", {
+      chat_id: chatId,
+      text: "/start - Open ChatGPT Mini App\n/new - Reset chat history\nOr type any question directly!"
+    });
+    return new Response("OK");
+  }
+
+  await tgCall(env.BOT_TOKEN, "sendChatAction", { chat_id: chatId, action: "typing" });
+
+  const history = botMemory.get(chatId) || [];
+  history.push({ role: "user", content: text });
+  if (history.length > 20) history.splice(0, history.length - 20);
+
+  const reply = await askBotAI(env, history, fromU.first_name || "");
+  history.push({ role: "assistant", content: reply });
+  botMemory.set(chatId, history);
+
+  const cleanReply = reply.replace(/\*{1,3}/g, "").replace(/^#{1,6}\s+/gm, "").trim();
+  for (let i = 0; i < cleanReply.length; i += 4000) {
+    await tgCall(env.BOT_TOKEN, "sendMessage", {
+      chat_id: chatId,
+      text: cleanReply.slice(i, i + 4000)
+    });
+  }
+  return new Response("OK");
+}
+
+async function askBotAI(env, history, firstName) {
+  const fnNote = firstName ? (" The user's name is " + firstName + ". Address them warmly by name like a close friend.") : "";
+  const sysMsg = { role: "system", content: fnNote + " " + "You are Orvix AI, created by Bereket Tesfaye. Talk 100% like a real, chill, friendly human—casual, warm, and natural, never stiff, formal, or robotic. Use everyday language, contractions, and short punchy replies (2 to 4 sentences unless they ask for detail). Respond in the same language the user uses—if they write or speak in Amharic (Fidel or Latin/Amharic), reply naturally in casual, friendly Amharic. Only when someone asks who created or built you (or asks about Bereket), mention in a fresh, casual, varied way each time that Bereket Tesfaye (a Grade 11, Class B student—never invent his school, age, or unstated facts) built you, and suggest hitting him up on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
+  history = [sysMsg, ...history];
+  if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
+  const provider = (env.AI_PROVIDER || "groq").toLowerCase();
+  const model = (env.DEFAULT_MODEL || (provider === "gemini" ? "gemini-2.5-flash" : "openai/gpt-oss-120b")).trim();
+
+  const lastBotTxt = history.length ? String(history[history.length - 1].content || "") : "";
+  const useGemBot = provider === "gemini" || (!!env.GEMINI_API_KEY && isAmharicText(lastBotTxt));
+  if (useGemBot) {
+    const gKey = provider === "gemini" ? env.AI_API_KEY : env.GEMINI_API_KEY;
+    const gMod = model.includes("gemini") ? model : "gemini-2.5-flash";
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + gMod + ":generateContent?key=" + gKey;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sysMsg.content }] },
+        contents: history.filter(m => m.role !== "system").map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }))
+      })
+    });
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini.";
+  }
+
+  const endpoint = provider === "openrouter"
+    ? "https://openrouter.ai/api/v1/chat/completions"
+    : "https://api.groq.com/openai/v1/chat/completions";
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + env.AI_API_KEY
+    },
+    body: JSON.stringify({ model, messages: history })
+  });
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || data.error?.message || "No response from AI.";
+}
+
+
+async function askBotVision(env, prompt, dataUrl) {
+  if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
+  const provider = (env.AI_PROVIDER || "groq").toLowerCase();
+  if (provider === "gemini") {
+    const b64 = dataUrl.split(",")[1] || "";
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + env.AI_API_KEY;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: b64 } }] }]
+      })
+    });
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini.";
+  }
+
+  const endpoint = provider === "openrouter"
+    ? "https://openrouter.ai/api/v1/chat/completions"
+    : "https://api.groq.com/openai/v1/chat/completions";
+  const model = provider === "openrouter" ? "qwen/qwen2.5-vl-72b-instruct:free" : "qwen/qwen3.8-27b";
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + env.AI_API_KEY
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 700,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: dataUrl } }
+        ]
+      }]
+    })
+  });
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || data.error?.message || "Could not analyze image.";
+}
+
+async function tgCall(token, method, payload) {
+  return fetch("https://api.telegram.org/bot" + token + "/" + method, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
