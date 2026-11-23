@@ -449,9 +449,34 @@ const HTML_PAGE = `<!DOCTYPE html>
       display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
       color: #facc15; margin-bottom: 6px;
     }
+
+    .empty-state {
+      align-items: flex-start !important; text-align: left !important; justify-content: center;
+      max-width: 640px !important; padding: 24px 20px !important; gap: 16px !important;
+    }
+    .brand-hero-row { display: flex; align-items: center; gap: 14px; }
+    .claude-anim-line {
+      font-size: 20px; font-weight: 500; color: var(--text-secondary);
+      min-height: 30px; letter-spacing: -0.01em;
+      background: linear-gradient(90deg, var(--text-primary), var(--brand-accent), var(--text-primary));
+      background-size: 200% auto;
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      animation: claudeShimmer 3.5s linear infinite;
+    }
+    @keyframes claudeShimmer { 0% { background-position: 0% center; } 100% { background-position: 200% center; } }
+    .icon-btn, .msg-action-btn, .model-btn, .btn-primary, .btn-danger, .followup-chip {
+      background: var(--glass-bg) !important;
+      border: 1px solid var(--glass-border) !important;
+      backdrop-filter: blur(14px) !important;
+      -webkit-backdrop-filter: blur(14px) !important;
+    }
+    .btn-primary { color: var(--text-primary) !important; box-shadow: 0 4px 16px rgba(56,189,248,0.18); }
+    .btn-danger { color: #fca5a5 !important; border-color: rgba(239,68,68,0.35) !important; }
+    .icon-btn:hover, .msg-action-btn:hover, .model-btn:hover { background: rgba(255,255,255,0.12) !important; }
   </style>  </style>  </style>  </style>
 </head>
 <body>
+  <div id="brightnessOverlay" style="position:fixed;inset:0;pointer-events:none;z-index:9999;background:transparent;transition:background 0.12s;"></div>
   <div id="splashScreen" class="splash-screen">
     <div class="splash-ring">
       <div class="splash-inner">
@@ -486,19 +511,12 @@ const HTML_PAGE = `<!DOCTYPE html>
         <div id="userAvatar" class="avatar">U</div>
         <div class="user-meta">
           <div id="userName" class="user-name">User</div>
-          <div id="userHandle" class="user-handle"></div>
+          <div id="userHandle" class="user-handle" style="display:none;"></div>
         </div>
       </div>
       <button class="icon-btn" onclick="openSettings()" title="Settings">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
       </button>
-    </div>
-    <div class="about-creator">
-      <div class="about-title">About • Bereket Tesfaye</div>
-      <div class="about-links">
-        <a class="about-link" href="tel:0960934894">📞 0960934894</a>
-        <a class="about-link" href="https://t.me/orvix16" onclick="if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.openTelegramLink('https://t.me/orvix16');return false;}">✈️ @orvix16</a>
-      </div>
     </div>
   </aside>
 
@@ -524,6 +542,15 @@ const HTML_PAGE = `<!DOCTYPE html>
         <button class="icon-btn" onclick="newChat()" title="New Chat">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
+        <div class="model-dropdown-wrap">
+          <button id="chatMenuBtn" class="icon-btn" onclick="toggleChatMenu(event)" title="Chat Options">⋮</button>
+          <div id="chatMenu" class="model-menu" style="left:auto; right:0; width:190px;">
+            <button class="model-option" onclick="menuPinActiveChat()"><span class="model-option-name" id="menuPinLabel">📌 Pin Chat</span></button>
+            <button class="model-option" onclick="menuRenameActiveChat()"><span class="model-option-name">✏️ Rename Chat</span></button>
+            <button class="model-option" onclick="exportActiveChat(); document.getElementById('chatMenu').classList.remove('open');"><span class="model-option-name">📤 Export (.txt)</span></button>
+            <button class="model-option" style="color:var(--danger);" onclick="menuDeleteActiveChat()"><span class="model-option-name">🗑️ Delete Chat</span></button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -671,6 +698,13 @@ const HTML_PAGE = `<!DOCTYPE html>
         <label class="field-label">Custom API Key (Optional, saved only on your device)</label>
         <input id="apiKeyInput" class="field-input" type="password" placeholder="Leave blank to use free bot key" />
       </div>
+      <div style="padding:12px; border-radius:14px; background:var(--glass-bg); border:1px solid var(--glass-border);">
+        <div class="field-label" style="margin-bottom:8px;">About • Bereket Tesfaye (Grade 11B)</div>
+        <div class="about-links">
+          <a class="about-link" href="tel:0960934894">📞 0960934894</a>
+          <a class="about-link" href="https://t.me/orvix16" onclick="if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.openTelegramLink('https://t.me/orvix16');return false;}">✈️ @orvix16</a>
+        </div>
+      </div>
       <div style="display:flex; gap:10px; justify-content:space-between; margin-top:4px;">
         <button class="btn-danger" onclick="clearAllChats()">Clear All</button>
         <button class="seg-btn" style="flex:0 0 auto;" onclick="exportActiveChat()">Export</button>
@@ -687,7 +721,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       { id: "openai/gpt-oss-120b", label: "Orvix Pro", desc: "Flagship 120B intelligence for coding, math & pro tasks", provider: "groq", mode: "pro" },
       { id: "openai/gpt-oss-20b", label: "Orvix Fast", desc: "Sub-second speed for everyday chat", provider: "groq", mode: "fast" },
       { id: "qwen/qwen3.8-27b", label: "Orvix Deep Research", desc: "In-depth analysis, live web search & vision", provider: "groq", mode: "deep" },
-      { id: "gemini-2.5-flash", label: "Orvix Amharic & Vision", desc: "Best for accurate Amharic & image OCR", provider: "gemini", mode: "amharic" }
+      { id: "gemini-3.8-flash", label: "Orvix Amharic & Vision", desc: "Best for accurate Amharic & image OCR", provider: "gemini", mode: "amharic" }
     ];
 
     let state = {
@@ -724,6 +758,20 @@ const HTML_PAGE = `<!DOCTYPE html>
       const btn = document.getElementById("installAppBtn");
       if (btn) btn.style.display = "none";
     }
+
+
+    const GREETINGS = [
+      "How can I help you today?",
+      "Let's think, build, or explore together.",
+      "Ask anything — code, math, vision, or voice."
+    ];
+    let gIdx = 0;
+    setInterval(() => {
+      const el = document.getElementById("claudeGreeting");
+      if (!el) return;
+      gIdx = (gIdx + 1) % GREETINGS.length;
+      el.textContent = GREETINGS[gIdx];
+    }, 3400);
 
     function init() {
       if (!MODELS.some(x => x.id === state.model)) { state.model = MODELS[0].id; localStorage.setItem("tg_gpt_model", state.model); }
@@ -774,10 +822,22 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (el) el.textContent = val;
     }
     function applyBrightness(val) {
-      document.documentElement.style.setProperty("--app-brightness", (val / 100).toFixed(2));
-      localStorage.setItem("tg_gpt_brightness", val);
+      const n = Number(val) || 100;
+      localStorage.setItem("tg_gpt_brightness", String(n));
       const el = document.getElementById("brightnessVal");
-      if (el) el.textContent = val;
+      if (el) el.textContent = n;
+      const ov = document.getElementById("brightnessOverlay");
+      if (ov) {
+        if (n < 100) {
+          const op = ((100 - n) / 100 * 0.82).toFixed(2);
+          ov.style.background = "rgba(0, 0, 0, " + op + ")";
+        } else if (n > 100) {
+          const op = ((n - 100) / 100 * 0.45).toFixed(2);
+          ov.style.background = "rgba(255, 255, 255, " + op + ")";
+        } else {
+          ov.style.background = "transparent";
+        }
+      }
     }
     function uploadLogoFile(file) {
       if (!file) return;
@@ -945,11 +1005,40 @@ const HTML_PAGE = `<!DOCTYPE html>
       )).join("");
     }
 
+    
+    function toggleChatMenu(e) {
+      e.stopPropagation();
+      const menu = document.getElementById("chatMenu");
+      if (!menu) return;
+      const c = state.chats.find(x => x.id === state.activeChatId);
+      const lbl = document.getElementById("menuPinLabel");
+      if (lbl) lbl.textContent = (c && c.pinned) ? "📌 Unpin Chat" : "📌 Pin Chat";
+      menu.classList.toggle("open");
+    }
+    function menuPinActiveChat() {
+      document.getElementById("chatMenu").classList.remove("open");
+      if (!state.activeChatId) return;
+      const c = state.chats.find(x => x.id === state.activeChatId);
+      if (c) { c.pinned = !c.pinned; saveChats(); renderSidebar(); }
+    }
+    function menuRenameActiveChat() {
+      document.getElementById("chatMenu").classList.remove("open");
+      const c = state.chats.find(x => x.id === state.activeChatId);
+      if (!c) return;
+      const nn = prompt("Rename chat:", c.title);
+      if (nn && nn.trim()) { c.title = nn.trim().slice(0, 50); saveChats(); renderSidebar(); }
+    }
+    function menuDeleteActiveChat() {
+      document.getElementById("chatMenu").classList.remove("open");
+      if (!state.activeChatId) return;
+      deleteChat({ stopPropagation(){} }, state.activeChatId);
+    }
+
     function toggleModelMenu(e) {
       e.stopPropagation();
       document.getElementById("modelMenu").classList.toggle("open");
     }
-    document.addEventListener("click", () => document.getElementById("modelMenu").classList.remove("open"));
+    document.addEventListener("click", () => { document.getElementById("modelMenu").classList.remove("open"); const cm = document.getElementById("chatMenu"); if (cm) cm.classList.remove("open"); });
 
     function selectModel(id) {
       state.model = id;
@@ -1016,7 +1105,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         items.forEach(c => {
           html += '<div class="chat-item ' + (c.id === state.activeChatId && !state.tempMode ? 'active' : '') + '" onclick="openChat(\\'' + c.id + '\\')">' +
             '<span class="chat-item-title">' + escapeHtml(c.title) + '</span>' +
-            '<button class="chat-item-pin ' + (c.pinned ? 'pinned' : '') + '" onclick="togglePinChat(event,\\'' + c.id + '\\')" title="Pin">★</button>' +
+            '<button class="chat-item-pin ' + (c.pinned ? 'pinned' : '') + '" onclick="togglePinChat(event,\\'' + c.id + '\\')" title="Pin">📌</button>' +
             '<button class="chat-item-del" onclick="deleteChat(event,\\'' + c.id + '\\')" title="Delete">✕</button>' +
           '</div>';
         });
@@ -1095,8 +1184,13 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (!msgs.length) {
         scroll.innerHTML =
           '<div class="empty-state">' +
-            '<div class="gpt-logo">' + getLogoHtml(28) + '</div>' +
-            '<div class="empty-title">' + (state.tempMode ? 'Temporary Chat' : 'Orvix AI') + '</div>' +
+            '<div class="brand-hero-row">' +
+              '<div class="gpt-logo">' + getLogoHtml(28) + '</div>' +
+              '<div>' +
+                '<div class="empty-title">' + (state.tempMode ? 'Temporary Chat' : 'Orvix AI') + '</div>' +
+                '<div id="claudeGreeting" class="claude-anim-line">How can I help you today?</div>' +
+              '</div>' +
+            '</div>' +
                         '<div id="suggestionsGrid" class="suggestions">' + renderSuggestionCards(getCurrentSuggestions()) + '</div>' +
           '</div>';
         return;
@@ -1116,12 +1210,12 @@ const HTML_PAGE = `<!DOCTYPE html>
             '<div class="msg-assistant-wrap">' +
               '<div class="assistant-avatar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg></div>' +
               '<div class="assistant-content">' +
-                (m.pinned ? '<div class="msg-pinned-badge">★ Pinned Message</div>' : '') +
+                (m.pinned ? '<div class="msg-pinned-badge">📌 Pinned Message</div>' : '') +
                 (m.content ? renderMarkdown(m.content) : '<div class="analysing-pill"><span class="typing-dot"></span><span>' + (state.model === "qwen/qwen3.8-27b" ? "Orvix Deep Research analysing..." : "Orvix analysing...") + '</span></div>') +
                 (!state.isGenerating || idx < msgs.length - 1 ? (
                   '<div class="msg-actions">' +
                     '<button class="msg-action-btn" onclick="copyMsg(' + idx + ', this)">Copy</button>' +
-                    '<button class="msg-action-btn" onclick="togglePinMsg(' + idx + ')">' + (m.pinned ? '★ Pinned' : '☆ Pin') + '</button>' +
+                    '<button class="msg-action-btn" onclick="togglePinMsg(' + idx + ')">' + (m.pinned ? '📌 Pinned' : '📌 Pin') + '</button>' +
                     '<button class="msg-action-btn" onclick="speakMsg(' + idx + ')">Read aloud</button>' +
                     (idx === msgs.length - 1 ? '<button class="msg-action-btn" onclick="regenerate()">Regenerate</button>' : '') +
                   '</div>' +
@@ -2111,7 +2205,7 @@ async function handleMiniAppChat(request, env) {
     const useGeminiSmart = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastUserTxt) || hasImages || model.includes("gemini"));
     if (provider === "gemini" || useGeminiSmart) {
       const gKey = provider === "gemini" ? apiKey : env.GEMINI_API_KEY;
-      return streamGemini(gKey, "gemini-2.5-flash", messages);
+      return streamGemini(gKey, "gemini-3.8-flash", messages);
     }
 
     const endpoint = provider === "openrouter"
@@ -2367,7 +2461,7 @@ async function handleFastVoice(request, env) {
     const useGemVoice = !!env.GEMINI_API_KEY && (body.lang === "am" || isAmharicText(lastSpoken));
     let reply = "";
     if (useGemVoice) {
-      const gUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + env.GEMINI_API_KEY;
+      const gUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + env.GEMINI_API_KEY;
       const gRes = await fetch(gUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2720,13 +2814,13 @@ async function askBotAI(env, history, firstName) {
   history = [sysMsg, ...history];
   if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
-  const model = (env.DEFAULT_MODEL || (provider === "gemini" ? "gemini-2.5-flash" : "openai/gpt-oss-120b")).trim();
+  const model = (env.DEFAULT_MODEL || (provider === "gemini" ? "gemini-3.8-flash" : "openai/gpt-oss-120b")).trim();
 
   const lastBotTxt = history.length ? String(history[history.length - 1].content || "") : "";
   const useGemBot = provider === "gemini" || (!!env.GEMINI_API_KEY && isAmharicText(lastBotTxt));
   if (useGemBot) {
     const gKey = provider === "gemini" ? env.AI_API_KEY : env.GEMINI_API_KEY;
-    const gMod = model.includes("gemini") ? model : "gemini-2.5-flash";
+    const gMod = model.includes("gemini") ? model : "gemini-3.8-flash";
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" + gMod + ":generateContent?key=" + gKey;
     const res = await fetch(url, {
       method: "POST",
@@ -2762,7 +2856,7 @@ async function askBotVision(env, prompt, dataUrl) {
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
   if (provider === "gemini") {
     const b64 = dataUrl.split(",")[1] || "";
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + env.AI_API_KEY;
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + env.AI_API_KEY;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
