@@ -539,10 +539,10 @@ const HTML_PAGE = `<!DOCTYPE html>
         <button id="tempChatBtn" class="icon-btn temp-badge" onclick="toggleTempChat()" title="Temporary Chat">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"><circle cx="12" cy="12" r="9"/></svg>
         </button>
-        <button class="icon-btn" onclick="newChat()" title="New Chat">
+        <button id="newChatTopBtn" class="icon-btn" style="display:none;" onclick="newChat()" title="New Chat">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
-        <div class="model-dropdown-wrap">
+        <div id="chatMenuWrap" class="model-dropdown-wrap" style="display:none;">
           <button id="chatMenuBtn" class="icon-btn" onclick="toggleChatMenu(event)" title="Chat Options">⋮</button>
           <div id="chatMenu" class="model-menu" style="left:auto; right:0; width:190px;">
             <button class="model-option" onclick="menuPinActiveChat()"><span class="model-option-name" id="menuPinLabel">📌 Pin Chat</span></button>
@@ -1181,6 +1181,13 @@ const HTML_PAGE = `<!DOCTYPE html>
     function renderChat() {
       const scroll = document.getElementById("chatScroll");
       const msgs = getActiveMessages();
+      const hasMsgs = msgs.length > 0;
+      const ncb = document.getElementById("newChatTopBtn");
+      const cmw = document.getElementById("chatMenuWrap");
+      const tcb = document.getElementById("tempChatBtn");
+      if (ncb) ncb.style.display = hasMsgs ? "flex" : "none";
+      if (cmw) cmw.style.display = (hasMsgs && !state.tempMode) ? "block" : "none";
+      if (tcb) tcb.style.display = hasMsgs ? "none" : "flex";
       if (!msgs.length) {
         scroll.innerHTML =
           '<div class="empty-state">' +
