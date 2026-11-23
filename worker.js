@@ -1212,7 +1212,8 @@ const HTML_PAGE = `<!DOCTYPE html>
             apiKey: state.apiKey,
             systemPrompt: state.customInst,
             fastVoice: !!isVoiceMode,
-            lang: appLang
+            lang: appLang,
+            userName: (document.getElementById("userName")?.textContent || "").trim()
           }),
           signal: state.abortCtrl.signal
         });
@@ -1893,9 +1894,11 @@ async function handleMiniAppChat(request, env) {
     const deepNote = (!body.fastVoice && body.model === "qwen/qwen3.8-27b")
       ? " Provide a thorough, well-structured Deep Research analysis with clear sections, key insights, and practical takeaways."
       : "";
-    const chatLangNote = body.lang === "am" ? " Always reply in natural, clear Amharic." : "";
+    const uName = String(body.userName || "").trim();
+    const nameNote = (uName && uName !== "User") ? (" The person talking to you is named " + uName.split(" ")[0] + ". Call them by their name naturally like a friend.") : "";
+    const chatLangNote = (body.lang === "am" ? " Always reply in casual, friendly Amharic." : "") + nameNote;
     const voiceNote = body.fastVoice ? " Speak like a warm, natural human friend in a live voice call—reply in 1 short, expressive sentence with no markdown or lists." : deepNote;
-    const systemPrompt = (body.systemPrompt || "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Respond in the same language the user uses—if they write or speak in Amharic (Fidel or Latin/Amharic), reply fluently in clear, natural Amharic. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11, Class B student—never invent his school name, age, or any unstated facts—and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote + chatLangNote;
+    const systemPrompt = (body.systemPrompt || "You are Orvix AI, created by Bereket Tesfaye. Talk 100% like a real, chill, friendly human—casual, warm, and natural, never stiff, formal, or robotic. Use everyday language, contractions, and short punchy replies (2 to 4 sentences unless they ask for detail). Respond in the same language the user uses—if they write or speak in Amharic (Fidel or Latin/Amharic), reply naturally in casual, friendly Amharic. Only when someone asks who created or built you (or asks about Bereket), mention in a fresh, casual, varied way each time that Bereket Tesfaye (a Grade 11, Class B student—never invent his school, age, or unstated facts) built you, and suggest hitting him up on Telegram (@orvix16) or WhatsApp/Phone (0960934894).") + voiceNote + chatLangNote;
     const rawMsgs = body.messages || [];
     const hasImages = rawMsgs.some(m => m.images && m.images.length > 0);
     const messages = [{ role: "system", content: systemPrompt }, ...rawMsgs.map(m => {
@@ -2169,7 +2172,9 @@ async function handleFastVoice(request, env) {
     const key = body.apiKey || env.AI_API_KEY;
     if (!key) return Response.json({ error: "Missing AI_API_KEY" }, { status: 400 });
 
-    const langHint = body.lang === "am" ? " Reply in clear, natural Amharic (using Ethiopic script)." : "";
+    const fvName = String(body.userName || "").trim();
+    const fvNameNote = (fvName && fvName !== "User") ? (" Call the user by their first name (" + fvName.split(" ")[0] + ") naturally like a friend.") : "";
+    const langHint = (body.lang === "am" ? " Reply in casual, friendly Amharic (using Ethiopic script)." : "") + fvNameNote;
     const sys = (body.systemPrompt || "You are Orvix AI, created by Bereket Tesfaye, a Grade 11 Class B student. Never invent any extra details about him; if asked who created you, say Bereket Tesfaye (Grade 11, Class B) and share Telegram @orvix16 or phone 0960934894.") +
       " You are on a live voice call like a real, warm human friend. React naturally, listen carefully, keep replies super crisp (1 to 2 natural spoken sentences, under 25 words), never use markdown, lists, or robotic filler." + langHint;
     const msgs = [{ role: "system", content: sys }, ...(body.messages || []).slice(-6).map(m => ({ role: m.role, content: m.content }))];
@@ -2497,7 +2502,7 @@ async function handleTelegramWebhook(request, env, origin) {
   history.push({ role: "user", content: text });
   if (history.length > 12) history.splice(0, history.length - 12);
 
-  const reply = await askBotAI(env, history);
+  const reply = await askBotAI(env, history, fromU.first_name || "");
   history.push({ role: "assistant", content: reply });
   botMemory.set(chatId, history);
 
@@ -2511,8 +2516,9 @@ async function handleTelegramWebhook(request, env, origin) {
   return new Response("OK");
 }
 
-async function askBotAI(env, history) {
-  const sysMsg = { role: "system", content: "You are Orvix AI, a helpful and accurate AI assistant created by Bereket Tesfaye. Always give short, direct, concise responses (2 to 4 sentences) unless the user explicitly asks for a detailed, long, or step-by-step explanation. Respond in the same language the user uses—if they write or speak in Amharic (Fidel or Latin/Amharic), reply fluently in clear, natural Amharic. Only when the user asks who created, built, or owns you (or asks about Bereket), explain in a fresh, natural, and varied way each time—never repeating the exact same wording—that you were built by Bereket Tesfaye, a Grade 11, Class B student—never invent his school name, age, or any unstated facts—and warmly invite them to connect with him on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
+async function askBotAI(env, history, firstName) {
+  const fnNote = firstName ? (" The user's name is " + firstName + ". Address them warmly by name like a close friend.") : "";
+  const sysMsg = { role: "system", content: fnNote + " " + "You are Orvix AI, created by Bereket Tesfaye. Talk 100% like a real, chill, friendly human—casual, warm, and natural, never stiff, formal, or robotic. Use everyday language, contractions, and short punchy replies (2 to 4 sentences unless they ask for detail). Respond in the same language the user uses—if they write or speak in Amharic (Fidel or Latin/Amharic), reply naturally in casual, friendly Amharic. Only when someone asks who created or built you (or asks about Bereket), mention in a fresh, casual, varied way each time that Bereket Tesfaye (a Grade 11, Class B student—never invent his school, age, or unstated facts) built you, and suggest hitting him up on Telegram (@orvix16) or WhatsApp/Phone (0960934894)." };
   history = [sysMsg, ...history];
   if (!env.AI_API_KEY) return "Please set AI_API_KEY in your Cloudflare Worker settings.";
   const provider = (env.AI_PROVIDER || "groq").toLowerCase();
