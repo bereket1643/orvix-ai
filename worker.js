@@ -453,6 +453,12 @@ const HTML_PAGE = `<!DOCTYPE html>
     <div class="splash-title">Orvix AI</div>
     <div class="splash-bar"><div class="splash-bar-fill"></div></div>
   </div>
+  <script>
+    setTimeout(function() {
+      var sp = document.getElementById("splashScreen");
+      if (sp) { sp.classList.add("hide"); setTimeout(function() { sp.style.display = "none"; }, 480); }
+    }, 1100);
+  </script>
   <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar(false)"></div>
   <aside id="sidebar" class="sidebar">
     <div class="sidebar-top">
@@ -820,6 +826,11 @@ const HTML_PAGE = `<!DOCTYPE html>
     }
 
 
+    function pickFollowup(msgIdx, fIdx) {
+      const msgs = getActiveMessages();
+      const m = msgs[msgIdx];
+      if (m && m.followups && m.followups[fIdx]) useSuggestion(m.followups[fIdx]);
+    }
     function applyAccent(hex) {
       document.documentElement.style.setProperty("--brand-accent", hex);
       localStorage.setItem("tg_gpt_accent", hex);
@@ -835,7 +846,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     function exportActiveChat() {
       const msgs = getActiveMessages();
       if (!msgs.length) return;
-      const txt = msgs.map(m => (m.role === "user" ? "You: " : "Orvix AI: ") + m.content).join("\n\n---\n\n");
+      const txt = msgs.map(m => (m.role === "user" ? "You: " : "Orvix AI: ") + m.content).join("\\n\\n---\\n\\n");
       const blob = new Blob([txt], { type: "text/plain" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -1076,7 +1087,7 @@ const HTML_PAGE = `<!DOCTYPE html>
                   '</div>' +
                   (idx === msgs.length - 1 && m.followups && m.followups.length ? (
                     '<div class="followup-wrap">' +
-                    m.followups.map(fq => '<button class="followup-chip" onclick="useSuggestion(\\'' + escapeHtml(fq).replace(/\\x27/g, "\\\\\\x27") + '\\')">↗ ' + escapeHtml(fq) + '</button>').join('') +
+                    m.followups.map((fq, fi) => '<button class="followup-chip" onclick="pickFollowup(' + idx + ',' + fi + ')">↗ ' + escapeHtml(fq) + '</button>').join('') +
                     '</div>'
                   ) : '')
                 ) : '') +
